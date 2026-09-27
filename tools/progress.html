@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Gauntlet Progress</title>
+<link rel="icon" href="data:," />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root{--bg:#0e0d0b;--panel:#171512;--line:#2c2823;--ink:#ece6dc;--mute:#9a9187;--accent:#c9a45c;--red:#c2412d;--green:#6e9a5a;--amber:#d19a3a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,system-ui,sans-serif}
+header{padding:28px 32px 18px;border-bottom:1px solid var(--line);display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap}
+h1{font:700 30px/1 Oswald,sans-serif;letter-spacing:.04em;margin:0;text-transform:uppercase}
+.sub{color:var(--mute);margin-top:6px}
+.pct{margin-left:auto;text-align:right}
+.pct b{font:700 44px/1 Oswald,sans-serif;color:var(--accent)}
+.bar{height:4px;background:var(--line);margin:0 32px}
+.bar i{display:block;height:100%;background:var(--accent);transition:width .6s}
+main{padding:24px 32px;display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden;display:flex;flex-direction:column}
+.card h2{font:600 16px/1 Oswald,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin:0}
+.top{padding:14px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
+.tag{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:3px;background:#2a2620;color:var(--mute)}
+.tag.building{color:var(--amber)}.tag.critic{color:#7fb0d6}.tag.won{color:var(--green)}.tag.lost{color:var(--red)}
+.round{margin-left:auto;color:var(--mute);font-size:12px}
+.hero{aspect-ratio:16/9;background:#000;display:block;width:100%;object-fit:cover}
+.thumbs{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;background:#000}
+.thumbs img{width:100%;aspect-ratio:16/9;object-fit:cover;cursor:pointer;opacity:.75}.thumbs img:hover{opacity:1}
+.body{padding:12px 16px 16px;color:var(--mute);font-size:13px}
+.body b{color:var(--ink);font-weight:600}
+.empty{aspect-ratio:16/9;display:grid;place-items:center;color:var(--mute);background:#0b0a09}
+section.log{padding:0 32px 40px}
+section.log h3{font:600 14px Oswald,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+section.log li{color:var(--mute);margin:4px 0}section.log li b{color:var(--ink);font-weight:500}
+@media (max-width:520px){header,main,section.log{padding-left:16px;padding-right:16px}.bar{margin:0 16px}main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Attack on Titan · Gauntlet</h1><div class="sub" id="bar-line">Bar: xikhar/spiderbench, blind A/B by a harsh critic</div></div>
+  <div class="pct"><b id="pct">–</b><div class="sub" id="upd">connecting…</div></div>
+</header>
+<div class="bar"><i id="pbar" style="width:0"></i></div>
+<main id="grid"></main>
+<section class="log"><h3>Log</h3><ul id="log"></ul></section>
+<script>
+const PIECES=[['render','Rendering & FX'],['world','Wall & Town'],['titans','Titans'],['cinematic','Colossal Breach Cinematic'],['player','ODM Gear & Combat'],['ui','Audio, HUD & Flow'],['critic','Critic A/B'],['game','Full Game']];
+const grid=document.getElementById('grid');const big={};
+for(const [k,n] of PIECES){const c=document.createElement('div');c.className='card';c.id='c-'+k;
+c.innerHTML=`<div class="top"><h2>${n}</h2><span class="tag">queued</span><span class="round"></span></div><div class="empty">no frames yet</div><div class="thumbs"></div><div class="body"></div>`;grid.appendChild(c);}
+async function tick(){try{const s=await (await fetch('/api/state',{cache:'no-store'})).json();
+document.getElementById('pct').textContent=(s.percent??0)+'%';document.getElementById('pbar').style.width=(s.percent??0)+'%';
+document.getElementById('upd').textContent='updated '+new Date(s.now).toLocaleTimeString()+(s.phase?' · '+s.phase:'');
+for(const [k] of PIECES){const c=document.getElementById('c-'+k);const p=(s.pieces||{})[k]||{};const sh=(s.shots||{})[k]||[];
+const tag=c.querySelector('.tag');tag.textContent=p.status||'queued';tag.className='tag '+(p.status||'');
+c.querySelector('.round').textContent=p.round?('round '+p.round):'';
+const hero=c.children[1];const src=big[k]||(sh[0]&&sh[0].f);
+if(src){if(hero.tagName!=='IMG'){const im=document.createElement('img');im.className='hero';c.replaceChild(im,hero);}const im=c.children[1];const want='/'+src+'?t='+((sh.find(x=>x.f===src)||{}).t||0);if(im.getAttribute('src')!==want)im.src=want;}
+c.querySelector('.thumbs').innerHTML=sh.slice(0,5).map(x=>`<img src="/${x.f}?t=${x.t}" data-f="${x.f}" title="${x.f}">`).join('');
+c.querySelectorAll('.thumbs img').forEach(im=>im.onclick=()=>{big[k]=im.dataset.f;tick();});
+c.querySelector('.body').innerHTML=(p.verdict?`<b>Critic:</b> ${p.verdict}<br>`:'')+(p.gap?`<b>Biggest gap:</b> ${p.gap}<br>`:'')+(p.note||'');}
+document.getElementById('log').innerHTML=(s.log||[]).slice().reverse().map(l=>`<li><b>${l.t}</b> ${l.m}</li>`).join('');
+}catch(e){document.getElementById('upd').textContent='offline';}}
+tick();setInterval(tick,4000);
+</script>
+</body>
+</html>

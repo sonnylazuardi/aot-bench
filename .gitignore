@@ -1,0 +1,9 @@
+node_modules
+dist
+shots
+*.log
+dist.tmp/
+dist.old/
+
+# third-party reference images (kept local, not redistributed)
+ref/
