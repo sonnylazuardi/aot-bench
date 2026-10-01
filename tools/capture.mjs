@@ -4,8 +4,11 @@
 //   bun tools/capture.mjs --only stills        # just artifacts/stills/still-01..06.png + MANIFEST.md
 //   bun tools/capture.mjs --only walk          # just artifacts/walkthrough-frames/ + artifacts/walkthrough.mp4
 //   bun tools/capture.mjs --only stills --stills 1,4    # re-shoot a subset (MANIFEST rows of the others are kept)
-//   options: --fps 6 (walkthrough frame rate)  --seed 7 (Math.random seed)  --frames 16 (sampled walkthrough PNGs)
+//   options: --colossal model|procedural (boss body; default model = adds `colossal=model` to every capture URL; if that
+//              path doesn't boot cleanly the page is reloaded procedural and the MANIFEST says so)
+//            --fps 6 (walkthrough frame rate)  --seed 7 (Math.random seed)  --frames 16 (sampled walkthrough PNGs)
 //            --out artifacts  --keep (keep the raw walkthrough JPEG sequence in artifacts/.walk-raw)
+//   AOT_SHOT_SLOTS=1 limits the shared headless-browser queue to one concurrent shot.
 //
 // Uses the dev server at AOT_URL (default http://127.0.0.1:5190) with ?shot=1&freeze=1: the real-time loop is stopped
 // (__game.hold) and the sim is stepped only by __game.advance(sec) (fixed 60 Hz, then one render), so every frame is
@@ -34,6 +37,8 @@ const ONLY = args.only || 'all';
 const SEED = Number(args.seed ?? 7);
 const FPS = Number(args.fps || 6);
 const NFRAMES = Number(args.frames || 16);
+const COLOSSAL = String(args.colossal || 'model');
+if (!['model', 'procedural'].includes(COLOSSAL)) { console.error('--colossal must be model | procedural'); process.exit(2); }
 const STILL_W = 1920, STILL_H = 1080, WALK_W = 1280, WALK_H = 720;
 if (!['all', 'stills', 'walk'].includes(ONLY)) { console.error('--only must be stills | walk'); process.exit(2); }
 
@@ -135,7 +140,31 @@ function installHelpers() {
 }
 
 const r3 = (a) => (a || []).map((v) => Math.round(v * 10) / 10);
+// Opens the game with the requested boss path. With --colossal model the page gets `colossal=model`; the boot counts as
+// clean when the page threw nothing, the colossal system loaded (not a stub) and the GLB request didn't fail. A broken
+// model boot is closed and reopened procedural. Returns { page, errors, url, boss } (boss = what was actually used).
 async function openGame(query, W, H) {
+  if (COLOSSAL === 'model') {
+    const g = await openGameRaw(query ? `${query}&colossal=model` : 'colossal=model', W, H);
+    const bad = g.pageErrors.length ? `page error: ${g.pageErrors[0].slice(0, 120)}`
+      : g.colossalStatus !== 'ok' ? `colossal system ${g.colossalStatus}`
+      : g.glb.failed ? `colossal.glb request failed (${g.glb.failed})` : null;
+    if (!bad) {
+      g.boss = g.glb.loaded ? 'model (colossal=model; public/assets/colossal/colossal.glb loaded)'
+        : 'colossal=model requested, but this build never requested colossal.glb, so the procedural body rendered (model path not wired in yet)';
+      return g;
+    }
+    log(`colossal=model did not boot cleanly (${bad}); reopening procedural`);
+    await g.page.close();
+    const p = await openGameRaw(query, W, H);
+    p.boss = `procedural (fallback: colossal=model did not boot cleanly: ${bad})`;
+    return p;
+  }
+  const p = await openGameRaw(query, W, H);
+  p.boss = 'procedural (--colossal procedural)';
+  return p;
+}
+async function openGameRaw(query, W, H) {
   const b = await launch();
   const page = await b.newPage({ viewport: { width: W, height: H } });
   await page.routeWebSocket(/.*/, () => {}).catch(() => {});
@@ -146,14 +175,18 @@ async function openGame(query, W, H) {
   }, SEED);
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`[error] ${m.text()}`); if (process.env.AOT_VERBOSE) console.log(`  [${m.type()}] ${m.text()}`); });
-  page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
+  const pageErrors = [], glb = { loaded: false, failed: null };
+  page.on('pageerror', (e) => { errors.push(`[pageerror] ${e.message}`); pageErrors.push(e.message); });
+  page.on('requestfinished', (r) => { if (/colossal\.glb/.test(r.url())) glb.loaded = true; });
+  page.on('requestfailed', (r) => { if (/colossal\.glb/.test(r.url())) glb.failed = r.failure()?.errorText || 'failed'; });
   const url = `${BASE}/?${query}${query ? '&' : ''}shot=1&freeze=1&q=high`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction(() => document.body.dataset.ready === '1', null, { timeout: 300000, polling: 500 });
   await page.evaluate(() => window.__game.hold());
   await page.evaluate(installHelpers);
+  const colossalStatus = await page.evaluate(() => window.__game.loadTimes?.colossal?.status || 'unknown');
   touchSlot();
-  return { page, errors, url };
+  return { page, errors, url, pageErrors, glb, colossalStatus };
 }
 
 // ------------------------------------------------------------------ stills
@@ -323,7 +356,7 @@ async function captureStills() {
     const k = String(s.n).padStart(2, '0'), file = path.join(dir, `still-${k}.png`);
     log(`still-${k}: loading`);
     const ts = Date.now();
-    const { page, errors, url } = await openGame(s.query, STILL_W, STILL_H);
+    const { page, errors, url, boss } = await openGame(s.query, STILL_W, STILL_H);
     let scene = '', setupErr = null;
     try { scene = await page.evaluate(s.setup); } catch (e) { setupErr = e.message.split('\n')[0]; log(`still-${k}: setup error ${setupErr}`); }
     // DOM HUD transitions/banners run on wall-clock time: let any pending ones start, then jump them to their end state;
@@ -346,6 +379,7 @@ async function captureStills() {
 - captured: ${iso} (wall time ${((Date.now() - ts) / 1000).toFixed(0)} s)
 - matched ref: \`refs-locked/${s.ref}\`
 - intent: ${s.desc}
+- boss body: ${boss}
 - scene/state: ${scene || '(setup failed)'}; url \`${url.replace(BASE, '')}\`; seed ${SEED}
   - mode=${st.mode}, phase=${st.phase}, boss=${st.bossState}${st.steaming ? ' (steaming)' : ''}, boss hp=${(st.bossHp ?? 0).toFixed(2)}, mood=${st.mood}, HUD ${st.hudVisible && s.hud ? 'on' : 'off'}, game clock ${st.clock} s
   - boss root ${JSON.stringify(r3(st.bossRoot))}, head ${JSON.stringify(r3(st.bossHead))}; weak points (*=active): ${wp}
@@ -369,7 +403,7 @@ async function captureWalkthrough() {
   const framesDir = path.join(OUT, 'walkthrough-frames'); fs.mkdirSync(framesDir, { recursive: true });
   for (const f of fs.readdirSync(framesDir)) if (/^frame-\d+\.png$/.test(f)) fs.rmSync(path.join(framesDir, f));
   log('walkthrough: loading title');
-  const { page, errors, url } = await openGame('', WALK_W, WALK_H);
+  const { page, errors, url, boss } = await openGame('', WALK_W, WALK_H);
   const dt = 1 / FPS;
   let n = 0;
   const beats = [];   // [frameIndex, label]
@@ -525,6 +559,7 @@ async function captureWalkthrough() {
 
 - video: \`artifacts/walkthrough.mp4\` — ${n} frames @ ${FPS} fps = ${secs.toFixed(1)} s of game time (1 frame per ${(1 / FPS).toFixed(3)} s of sim; H.264 CRF 18)
 - frames: \`artifacts/walkthrough-frames/frame-01..${String(NFRAMES).padStart(2, '0')}.png\` (${NFRAMES} evenly spaced, converted losslessly from the JPEG-q92 capture sequence)
+- boss body: ${boss}
 - build: \`${COMMIT}\`; resolution ${WALK_W}x${WALK_H}; url \`${url.replace(BASE, '')}\`; seed ${SEED}; captured ${new Date().toISOString()} (wall time ${((Date.now() - t0) / 60000).toFixed(1)} min)
 - script beats (frame index — beat):
 ${beats.map(([f, l]) => `  - ${f} — ${l}`).join('\n')}

@@ -73,7 +73,10 @@ function toGeometry(a) {
 }
 
 let pre = null;
-export function prewarm(ctx) { pre ||= buildAll(ctx.quality?.level); }
+// body source: 'procedural' (SDF sculpt) or 'model' (imported Colossal Titan, colossalModel.js); ?colossal=model|procedural
+const DEFAULT_BODY = 'model';
+const useModel = (ctx) => (ctx.params?.colossal || DEFAULT_BODY) === 'model';
+export function prewarm(ctx) { if (useModel(ctx)) { import('./colossalModel.js').then((m) => m.preload()).catch(() => {}); return; } pre ||= buildAll(ctx.quality?.level); }
 
 export async function create(ctx) {
   const { LAYOUT, scene } = ctx;
@@ -101,7 +104,7 @@ export async function create(ctx) {
   const bindPos = (n) => new THREE.Vector3(...bdefs[bi[n]].pos);
 
   // ---------- meshes ----------
-  const arrays = await (pre || buildAll(ctx.quality?.level));
+  const arrays = useModel(ctx) ? {} : await (pre || buildAll(ctx.quality?.level));
   const skin = createSkinMaterial(new THREE.Vector3(...SOCKETS[0].c), new THREE.Vector3(...SOCKETS[1].c), new THREE.Vector3(...SOCKETS[0].rad));
   const hairMat = createHairMaterial(H(0, -0.12, 0)[1]);
   const heroFog = (m, k = 0.4) => { m.defines = { ...(m.defines || {}), AOT_FOG_K: k }; m.needsUpdate = true; return m; };
@@ -190,6 +193,8 @@ export async function create(ctx) {
     bone('head').add(m);
     return m;
   });
+  const model = useModel(ctx) ? await (await import('./colossalModel.js')).createColossalModel(ctx, { root, bones, bdefs, bi, K, heroFog }) : null;
+  if (model) { for (const o of [teethUp, teethLo, gullet, tongue, ...eyes]) o.visible = false; meshes.push(...model.meshes); shadowProxies.push(...model.shadowProxies); tris = model.tris; shadowTris = model.shadowTris; }
   const genMs = performance.now() - t0;
   console.log(`[colossal] giant built: ${tris | 0} tris in ${genMs | 0} ms`);
   root.visible = false;
@@ -275,6 +280,7 @@ export async function create(ctx) {
     ['thighL', 'shinL', 0.13], ['shinL', 'footL', 0.07], ['thighR', 'shinR', 0.13], ['shinR', 'footR', 0.07],
     ['footL', 'toeL', 0.045], ['footR', 'toeR', 0.045]]
     .map(([a, b, r, off]) => ({ a: bone(a), b: bone(b), r: r * K, off: off ? new THREE.Vector3(...off) : null, pa: new THREE.Vector3(), pb: new THREE.Vector3(), va: new THREE.Vector3(), vb: new THREE.Vector3(), pa0: new THREE.Vector3(), pb0: new THREE.Vector3() }));
+  model?.fitCaps(CAPS);
   let capsValid = false;
   function updateCaps(dt) {
     for (const c of CAPS) {
@@ -389,6 +395,7 @@ export async function create(ctx) {
       bone('head').getWorldPosition(headPosition);
       headPosition.add(_v.set(0, 0.06 * K, 0.04 * K).applyQuaternion(bone('head').getWorldQuaternion(new THREE.Quaternion())));
       brain.afterPose();
+      model?.update(dt, sys, G);
       // eyes: follow the camera a little inside the squint
       for (const e of eyes) {
         e.getWorldPosition(_v);

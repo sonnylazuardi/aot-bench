@@ -4,7 +4,7 @@ A browser boss-fight game written by Claude, inspired by [xikhar/spiderbench](ht
 
 A ~70 m Smiling Titan rises over the 50 m wall of Shiganshina, kicks in the gate and wades into the town eating the townspeople. You fly at it with ODM gear.
 
-Everything is generated in code at load time: the town and wall, the titans (SDF sculpting, then meshing, then a skinned rig), the soldier, the textures, the particle effects, and every sound and note of music. There are no downloaded assets.
+Everything except the Colossal Titan model (see Credits) is generated in code at load time: the town and wall, the titans (SDF sculpting, then meshing, then a skinned rig), the soldier, the textures, the particle effects, and every sound and note of music. There are no downloaded assets.
 
 ## What's in it
 - **Scene:** the Shiganshina district.
@@ -63,3 +63,6 @@ URL flags:
 
 ## Disclaimer
 This is an unofficial fan project, made only as a technical demonstration. It is not affiliated with, endorsed by or sponsored by Hajime Isayama, Kodansha, Wit Studio, MAPPA, Koei Tecmo or any rights holder of *Attack on Titan*. *Attack on Titan* and related names, characters and likenesses are trademarks and copyrighted material of their respective owners, and no rights to them are claimed. This project is not for sale and may not be used commercially.
+
+## Credits
+- Colossal Titan model: "Colossal Titan" by [Sidaivan](https://sketchfab.com/Sidaivan) ([source](https://sketchfab.com/3d-models/colossal-titan-e031a57fd4bf411f8e893361676b4544)), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Modified: rescaled, compressed, LODs, retargeted to the boss rig. See `public/assets/colossal/ATTRIBUTION.md`. It is the one downloaded asset; everything else is generated in code. Use `?colossal=procedural` for the original code-built Colossal.
