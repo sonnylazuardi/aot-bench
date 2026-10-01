@@ -121,3 +121,14 @@ Append under your builder name. Lead reads this.
 - 21:20 CORRECTION (three r186): WebGLShadowMap tests caster layers against the MAIN view camera (renderObject :519-522), not the
   shadow/cascade cameras → shadow-only proxies must be on layer 0 with colorWrite:false/depthWrite:false. Giant had no shadow in
   2a4f746; fix sent to COLOSSAL. health.mjs now WARNs when shadow:colossal has 0 draws.
+
+## PERF (Oct 1, real RTX 3060 laptop, 1080p q=high)
+- Tools: `bun tools/gpuscen.mjs [--intro]` (scenario fps/1% low/worst/GPU ms), `tools/gpuhitch.mjs` (per-second buckets, long-frame +
+  LoAF attribution, slow calls, `--profile`), `tools/gpupass.mjs` (GPU ms per post pass, `--hide`, use `&freeze=1` for repeatable
+  frames), `tools/gpuab.mjs` (GPU A/B by elimination). All stub the HMR socket. Results are skewed when headless SwiftShader runs
+  in parallel (CPU contention) — benchmark on a quiet machine.
+- main.js: warmShaders() (compileAsync with the composer HDR target bound + hidden objects/DOF/particles revealed for the warm-up
+  frames), stable per-variant shadow depth materials, adaptive resolution (`?dynres=0`), audio bank awaited behind the loader.
+- Rules for everyone: no implicit-LOD `texture()` inside loops/branches in heavy shaders (D3D flattens them — the cloud march
+  cost 4.4 ms instead of 0.8); no always-on 0-intensity lights; anything spawned later (titans, fx materials) must have a hidden
+  never-disposed stand-in in the scene so its programs link at load; no main-thread synthesis/generation during play.
