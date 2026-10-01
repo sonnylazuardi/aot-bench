@@ -256,7 +256,15 @@ export async function create(ctx) {
     }, (u) => {
       const hp = head(_v2);
       const e = ease.inOut(u);
-      C.pos.set(lerp(-5, -3, e), lerp(3, 6, e), lerp(330, 342, e)); C.target.copy(hp).add(_v.set(0, -3, 0)); C.fov = lerp(30, 22, e); C.hand = 0.22; C.roll = lerp(0.06, 0.02, e);
+      // from an upper window / rooftop ~160 m back in town: the sightline clears the 50 m parapet, long lens keeps the low-angle
+      // feel; slow push toward the wall, framing the face with the hands on the parapet against the sky
+      C.pos.set(lerp(-14, -10, e), lerp(26, 30, e), lerp(214, 236, e));
+      C.target.copy(hp).add(_v.set(0, -7, 0));
+      // guarantee the head clears the parapet from here: lift the camera if the sightline would graze the wall top
+      const dz = Math.max(1, hp.z - C.pos.z), wz = Math.max(0, L.wall.radius - C.pos.z);
+      const yAtWall = C.pos.y + (hp.y - 6 - C.pos.y) * (wz / dz);
+      if (yAtWall < L.wall.height + 2) C.pos.y = Math.min(46, C.pos.y + (L.wall.height + 2 - yAtWall) / Math.max(0.05, 1 - wz / dz)); // bounded (stays a low angle)
+      C.fov = lerp(17, 12.5, e); C.hand = 0.22; C.roll = lerp(0.04, 0.015, e);
       for (const st of S.headSteam || []) if (st.h.position) st.h.position.copy(hp).add(_v.set(st.sx * 5, 4, 8)); // behind and above the head
     });
 

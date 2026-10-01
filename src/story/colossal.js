@@ -105,11 +105,14 @@ export async function create(ctx) {
 
   // ---------- meshes ----------
   const arrays = useModel(ctx) ? {} : await (pre || buildAll(ctx.quality?.level));
-  const skin = createSkinMaterial(new THREE.Vector3(...SOCKETS[0].c), new THREE.Vector3(...SOCKETS[1].c), new THREE.Vector3(...SOCKETS[0].rad));
+  // model mode never draws the procedural skin: use a stand-in with the same uniforms so the muscle-texture worker never starts
+  const skin = useModel(ctx)
+    ? Object.assign(new THREE.MeshStandardMaterial(), { userData: { uniforms: new Proxy({}, { get: (t, k) => (t[k] ||= { value: 0 }) }) } })
+    : createSkinMaterial(new THREE.Vector3(...SOCKETS[0].c), new THREE.Vector3(...SOCKETS[1].c), new THREE.Vector3(...SOCKETS[0].rad));
   const hairMat = createHairMaterial(H(0, -0.12, 0)[1]);
   const heroFog = (m, k = 0.4) => { m.defines = { ...(m.defines || {}), AOT_FOG_K: k }; m.needsUpdate = true; return m; };
   heroFog(skin, 0.5); heroFog(hairMat);
-  const mats = [skin, hairMat];
+  const mats = useModel(ctx) ? [hairMat] : [skin, hairMat];
   const meshes = [];
   let tris = 0;
   for (const name of PARTS) {

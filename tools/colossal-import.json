@@ -1,0 +1,4 @@
+{
+  "//": "Overrides for tools/import-colossal.mjs. hipHeight sets the uniform scale (model units, colossalBody.js; x K=38 in game). 0.92 = the procedural rig's hips (63 m tall model); 1.02 -> ~70 m so the head clears the 50 m parapet in the intro like the procedural giant did.",
+  "hipHeight": 1.02
+}
