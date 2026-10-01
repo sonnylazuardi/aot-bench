@@ -24,43 +24,55 @@ const GROUP = { crunch: 'bite', giant_bite: 'bite', grab: 'grab', giant_grab: 'g
 const GIANT_VOICE = new Set(['giant_roar', 'giant_groan', 'giant_hurt']);
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
+
+// ------------------------------------------------ offline rendering (module level so it can start at import time):
+// streamed in priority order by parallel workers that yield to the main thread between sounds. All DSP runs natively on
+// OfflineAudioContext render threads; main-thread work per sound is graph building + one normalisation pass.
+// play() on a sound that isn't ready yet simply skips; loops start when ready.
+const BANK = (() => {
+  const B = { buffers: {}, loopBuffers: {}, ctx: null, stats: { rendered: 0, renderMs: 0, errors: 0, played: 0, deduped: 0, fallbacks: 0 } };
+  let t0 = 0, resolveAll = null;
+  B.renderAll = new Promise((r) => { resolveAll = r; });
+  B.startRender = () => {
+    if (t0) return; t0 = performance.now();
+    try { ensureBank?.(); } catch (e) { console.warn('[audio] score bank', e); }
+    const queue = ORDER.concat(Object.keys(SOUNDS).filter((n) => !ORDER.includes(n) && !LAZY.has(n)));
+    const loading = () => !B.ctx || B.ctx.mode === 'loading' || !document.body.dataset.ready;
+    const idle = () => new Promise((r) => (loading() || !window.requestIdleCallback ? setTimeout(r, 0) : requestIdleCallback(() => r(), { timeout: 60 })));
+    const worker = async () => {
+      while (queue.length) {
+        const name = queue.shift(), def = SOUNDS[name]; if (!def) continue;
+        try {
+          const list = [];
+          for (let v = 0; v < def.variants; v++) { list.push(await renderSound(name, v)); await idle(); }
+          B.buffers[name] = list;
+          if (LOOPABLE.includes(name)) B.loopBuffers[name] = [await renderSound(name, 0, true)];
+          B.stats.rendered++;
+        } catch (e) { B.stats.errors++; console.warn('[audio] render failed', name, e); }
+        await idle();
+      }
+    };
+    // 4 graph builders in flight: the offline renders run on their own threads, so more overlap = shorter bank time
+    initPools().then(() => Promise.all([worker(), worker(), worker(), worker()])).then(() => { B.stats.renderMs = Math.round(performance.now() - t0); resolveAll(); });
+  };
+  B.ready = B.renderAll.then(() => ensureBank?.()).catch(() => {});
+  return B;
+})();
+export function prewarm() { BANK.startRender(); }
+
 export async function create(ctx) {
-  const buffers = {}, loopBuffers = {};
+  const { buffers, loopBuffers } = BANK;
   let ac = null, mx = null, score = null, unlocked = false;
   let musicState = 'title', masterVol = 1, simT = 0;
-  const stats = { rendered: 0, renderMs: 0, errors: 0, played: 0, deduped: 0, fallbacks: 0 };
+  const stats = BANK.stats;
   const recent = {};   // group -> {t, pos}
   const fbq = [];      // event-driven fallback plays
   const pendingLoops = new Set();
   const listenerPos = V(), _f = V(), _u = V(), _v = V(), _q = new THREE.Quaternion();
 
-  // ------------------------------------------------ offline rendering: deferred until the game has loaded (or the
-  // first unlock), streamed in priority order by 3 parallel workers that yield to the main thread between sounds.
-  // All DSP runs natively on OfflineAudioContext render threads; main-thread work per sound is graph building
-  // + one normalisation pass (a few ms). play() on a sound that isn't ready yet simply skips; loops start when ready.
-  let t0 = 0, startRender = null;
-  const renderAll = new Promise((resolve) => {
-    startRender = () => {
-      if (t0) return; t0 = performance.now();
-      try { ensureBank?.(); } catch (e) { console.warn('[audio] score bank', e); }
-      const queue = ORDER.concat(Object.keys(SOUNDS).filter((n) => !ORDER.includes(n) && !LAZY.has(n)));
-      const idle = () => new Promise((r) => (ctx.mode === 'loading' || !window.requestIdleCallback ? setTimeout(r, 0) : requestIdleCallback(() => r(), { timeout: 60 })));
-      const worker = async () => {
-        while (queue.length) {
-          const name = queue.shift(), def = SOUNDS[name]; if (!def) continue;
-          try {
-            const list = [];
-            for (let v = 0; v < def.variants; v++) { list.push(await renderSound(name, v)); await idle(); }
-            buffers[name] = list;
-            if (LOOPABLE.includes(name)) loopBuffers[name] = [await renderSound(name, 0, true)];
-            stats.rendered++;
-          } catch (e) { stats.errors++; console.warn('[audio] render failed', name, e); }
-          await idle();
-        }
-      };
-      initPools().then(() => Promise.all([worker(), worker(), worker()])).then(() => { stats.renderMs = Math.round(performance.now() - t0); resolve(); });
-    };
-  });
+  // offline sound bank: module level, started by prewarm() as soon as this module is imported (see BANK below)
+  const { renderAll, startRender } = BANK;
+  BANK.ctx = ctx;
   const lazyP = {};
   function ensure(name) { // on-demand render for LAZY sounds (the request itself is skipped; loops start when ready)
     if (!LAZY.has(name) || buffers[name] || lazyP[name]) return;
@@ -68,10 +80,10 @@ export async function create(ctx) {
     lazyP[name] = (async () => { const list = []; for (let v = 0; v < def.variants; v++) list.push(await renderSound(name, v)); buffers[name] = list; if (LOOPABLE.includes(name)) loopBuffers[name] = [await renderSound(name, 0, true)]; stats.rendered++; })()
       .catch((e) => { stats.errors++; console.warn('[audio] lazy render failed', name, e); });
   }
-  // perf: synthesis starts right away, under the loading screen (main.js awaits bankReady before 'ready'), so its
-  // ~2.5 s of main-thread graph building (single tasks up to ~200 ms) never lands in the intro or in play
-  setTimeout(() => startRender(), 0);
-  const bankReady = Promise.all([renderAll, ensureBank?.() ?? Promise.resolve()]).catch(() => {});
+  // perf: synthesis starts at module import (prewarm) and overlaps the rest of the loading; main.js awaits bankReady
+  // before 'ready', so its ~2.5 s of main-thread graph building (tasks up to ~200 ms) never lands in the intro or play
+  startRender();
+  const bankReady = BANK.ready;
 
   // ------------------------------------------------ unlock (call from a click; any first gesture also works)
   let unlockP = null;

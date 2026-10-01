@@ -507,7 +507,9 @@ export function createCivilians(ctx) {
       }
       // far away (>150 m): pose at ~15 Hz, staggered
       c.poseAcc = (c.poseAcc || (c.slot % 4) / 60) + dt;
-      if (c.state === 'grabbed' || c.poseAcc >= 1 / 15 || c.position.distanceToSquared(_cam) < 150 * 150) { pose(c, time); c.poseAcc = 0; }
+      // perf: pose rate by distance — full rate < 50 m, 30 Hz < 150 m, 15 Hz beyond
+      const d2 = c.position.distanceToSquared(_cam);
+      if (c.state === 'grabbed' || d2 < 50 * 50 || c.poseAcc >= (d2 < 150 * 150 ? 1 / 31 : 1 / 15)) { pose(c, time); c.poseAcc = 0; }
       maxIdx = Math.max(maxIdx, c.slot + 1);
     }
     for (const [name, n] of DEF) { IM[name].count = Math.max(IM[name].count, maxIdx * n); IM[name].instanceMatrix.needsUpdate = true; }

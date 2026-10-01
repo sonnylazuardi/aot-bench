@@ -8,3 +8,6 @@ dist.old/
 # third-party reference images (kept local, not redistributed)
 ref/
 .wrangler/
+
+# raw downloaded source models (processed copies live in public/assets)
+assets-src/

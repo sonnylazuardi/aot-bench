@@ -180,7 +180,7 @@ const STILLS = [
       const c = __ctx, k = __cap, C = c.colossal, P = c.player, T = c.THREE; c.hud.setVisible(false);
       k.adv(2); C.setPhaseDebug(2); k.adv(6); k.calm(); c.sky.setMood('golden', 0);
       const r = C.object.position.clone();
-      const camP = k.V(r.x + 6, 24, r.z - 78), tgt = k.V(r.x - 3, 31, r.z);
+      const camP = k.V(r.x + 6, 24, r.z - 78), tgt = k.V(r.x - 3, 37, r.z);
       const dir = tgt.clone().sub(camP).normalize(), right = new T.Vector3().crossVectors(dir, k.V(0, 1, 0)).normalize();
       const up = new T.Vector3().crossVectors(right, dir);
       const wallPt = (x) => k.V(x, 49, Math.sqrt(387 * 387 - x * x));
@@ -192,7 +192,7 @@ const STILLS = [
       // place the lens relative to where the swinging soldier actually is (same offset as planned)
       const p = P.position.clone().add(k.V(0, 1, 0));
       const cam2 = p.clone().addScaledVector(dir, -4.6).addScaledVector(right, 1.7).addScaledVector(up, -0.75);
-      k.cam(cam2, cam2.clone().add(tgt.clone().sub(camP)), 50);
+      k.cam(cam2, cam2.clone().add(tgt.clone().sub(camP)), 53);
       k.adv(0.02);
       return 'phase 2 fight (setPhaseDebug(2): hands severed, boss striding inside the wall), player airborne on both hooks (debugHook) anchored to the wall top, HUD hidden, debug camera ~4.5 m behind the soldier; the gate church stands west of the boss, so it lands right of it in this south-facing view';
     },
@@ -206,7 +206,7 @@ const STILLS = [
       P.teleport(k.V(60, 40, -60), 0); P.setEnabled(false);   // soldier out of this shot
       k.adv(0.5);
       const r = C.object.position.clone();
-      k.cam(k.V(r.x - 5, r.y + 1.8, r.z - 36), k.V(r.x, r.y + 25, r.z), 78);
+      k.cam(k.V(r.x - 5, r.y + 1.8, r.z - 36), k.V(r.x, r.y + 27, r.z), 80);
       k.adv(0.02);
       return 'phase 3 fight (setPhaseDebug(3): fury, venting steam), player moved out of shot, HUD hidden, debug camera at street level on the main avenue ~36 m in front of the boss';
     },
@@ -219,7 +219,7 @@ const STILLS = [
       P.noPointerLock = true; k.calm();
       k.adv(4); k.calm(); c.sky.setMood('day', 0);
       const h = C.headPosition.clone();
-      const pp = k.V(h.x - 10, 58, 350);
+      const pp = k.V(h.x - 9, 60, 365);
       P.teleport(pp, Math.atan2(h.x - pp.x, h.z - pp.z));
       P.pitch = 0.12;
       k.adv(0.1);
@@ -248,6 +248,8 @@ const STILLS = [
       const p = P.position.clone();
       const fwd = k.V(Math.sin(P.yaw), 0, Math.cos(P.yaw)), side = k.V(fwd.z, 0, -fwd.x);
       const camP = p.clone().addScaledVector(fwd, 2.3).addScaledVector(side, -1.5).add(k.V(0, 0.3, 0));
+      const under = k.surface(camP.x, camP.z, camP.y + 30);   // keep the lens above the (sloped) roof skin
+      if (under && under.point.y + 0.45 > camP.y) camP.y = under.point.y + 0.45;
       const tgt = p.clone().addScaledVector(fwd, -1.2).addScaledVector(side, 0.9).add(k.V(0, 2.6, 0));
       k.cam(camP, tgt, 64);
       k.adv(0.02);

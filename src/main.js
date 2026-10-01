@@ -212,7 +212,7 @@ addEventListener('resize', () => {
 // (render targets are reallocated, so it moves at most every ~1.5 s, with hysteresis). Reads the GPU timer query
 // (perf.gpuEma); without the extension it does nothing. ?dynres=0 disables, ?pr= pins the pixel ratio.
 quality.renderScale = 1;
-const dynres = { on: !shotMode && params.dynres !== '0' && !params.pr, min: qualityLevel === 'low' ? 0.6 : 0.7, hi: 13.6, lo: 10.2, overT: 0, underT: 0, cool: 3 };
+const dynres = { on: !shotMode && params.dynres !== '0' && !params.pr, min: qualityLevel === 'low' ? 0.6 : 0.75, hi: 14.2, lo: 10.4, overT: 0, underT: 0, cool: 4 };
 function updateDynRes(dt) {
   if (!dynres.on) return;
   const g = perf.gpuEma;
@@ -222,8 +222,8 @@ function updateDynRes(dt) {
   dynres.underT = g < dynres.lo ? dynres.underT + dt : 0;
   if (dynres.cool > 0) return;
   let s = quality.renderScale;
-  if (dynres.overT > 0.4 && s > dynres.min) s = Math.max(dynres.min, s - (g > dynres.hi * 1.3 ? 0.15 : 0.075));
-  else if (dynres.underT > 2.5 && s < 1) s = Math.min(1, s + 0.075);
+  if (dynres.overT > 0.7 && s > dynres.min) s = Math.max(dynres.min, s - (g > dynres.hi * 1.3 ? 0.125 : 0.0625));
+  else if (dynres.underT > 2.5 && s < 1) s = Math.min(1, s + 0.0625);
   if (s !== quality.renderScale) {
     quality.renderScale = +s.toFixed(3);
     applyResolution();

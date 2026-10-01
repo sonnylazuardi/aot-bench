@@ -1,6 +1,7 @@
 // Resupply point: crates, spare canisters, a signal pennant and a red signal flare with a short rising smoke plume
 // visible across the district. Walk into it -> ctx.player.refill().
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { findChurch } from './town.js';
 
 export function churchRoofPoint(ctx) {
@@ -67,6 +68,24 @@ export function createResupply(ctx, { position, label = 'Resupply' } = {}) {
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 0.16, 10), brass); cap.position.set(1.6 + i * 0.44, 1.33, -0.8); group.add(cap);
   }
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 6, 8), wood2); pole.position.set(-0.9, 3, -1.2); pole.castShadow = true; group.add(pole);
+  // perf: the 18 static crate/band/canister/cap/pole meshes are merged into one mesh per material (draw calls 18 -> 4)
+  {
+    const byMat = new Map();
+    for (const m of group.children.slice()) {
+      if (!m.isMesh) continue;
+      m.updateMatrix();
+      const g = m.geometry.clone().applyMatrix4(m.matrix);
+      for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+      const e = byMat.get(m.material) || byMat.set(m.material, { geos: [], shadow: false }).get(m.material);
+      e.geos.push(g.index ? g.toNonIndexed() : g); e.shadow ||= m.castShadow;
+      group.remove(m); m.geometry.dispose();
+    }
+    for (const [mat, e] of byMat) {
+      const merged = new THREE.Mesh(mergeGeometries(e.geos), mat);
+      merged.castShadow = e.shadow; merged.receiveShadow = true;
+      group.add(merged);
+    }
+  }
   const flagGeo = new THREE.PlaneGeometry(1.9, 1.1, 8, 1); flagGeo.translate(0.95, 0, 0);
   const flag = new THREE.Mesh(flagGeo, new THREE.MeshStandardMaterial({ color: 0x2f5a3a, roughness: 0.85, side: THREE.DoubleSide }));
   flag.position.set(-0.86, 5.3, -1.2); flag.castShadow = true; group.add(flag);
