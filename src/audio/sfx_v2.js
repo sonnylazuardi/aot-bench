@@ -56,6 +56,13 @@ export const V2 = {
     k.chain(k.noise(0.05, 3, 'pink'), k.bp(700, 0.5), k.env([[0, 0], [0.15, 0.25], [2.8, 0]], 0.05), O); // dust & grit
   } },
   // ---- ODM gear
+  // doppler-ish pass-by: air compressing against a wall / the titan's body as you skim past it
+  passby: { dur: 1.0, ch: 1, variants: 3, sat: 1.3, build(k, v) {
+    const O = k.out, pk = 0.28 + v * 0.04;
+    k.chain(k.noise(0, 0.95, 'pink'), k.sweep(k.bp(700, 1.3), [[0, 500], [pk, 2600 + v * 300], [0.9, 380]]), k.env([[0, 0], [pk, 1], [pk + 0.12, 0.55], [0.9, 0]]), O);
+    k.chain(k.noise(0, 0.9, 'pink'), k.sweep(k.bp(160, 1), [[0, 110], [pk, 320], [0.85, 90]]), k.env([[0, 0], [pk, 0.8], [0.85, 0]]), O);
+    k.chain(k.flutter(k.chain(k.noise(0.1, 0.6), k.hp(4000)), 40, 0.8, 1), k.env([[0, 0], [pk - 0.1, 0.35], [0.7, 0]], 0.1), O);
+  } },
   hook_fire: { dur: 1.0, ch: 2, variants: 3, sat: 1.6, build(k, v) {
     const O = k.out;
     k.hit(0, { f: 4200, Q: 3, a: 0.0003, d: 0.005, amp: 1 });                               // trigger

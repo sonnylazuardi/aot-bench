@@ -8,11 +8,11 @@ import * as THREE from 'three';
 import { SOUNDS, renderSound } from './sounds.js';
 import { initPools } from './kit.js';
 import { Mixer, MIX } from './mixer.js';
-import { Score } from './score.js';
+import { Score, ensureBank } from './score.js';
 
 // render order: what the first seconds need first; long cinematic beds last
 const ORDER = ['ui_tick', 'ui_confirm', 'taiko', 'taiko_hi', 'rim', 'gran', 'odaiko', 'swell', 'impact', 'wind',
-  'thunder', 'transform', 'giant_step', 'giant_roar', 'wall_crush', 'wall_break', 'boom', 'bell', 'scream', 'giant_grab', 'steam_blast', 'giant_breath', 'rubble',
+  'thunder', 'transform', 'giant_step', 'giant_roar', 'wall_crush', 'wall_break', 'boom', 'bell', 'scream', 'giant_grab', 'steam_blast', 'passby', 'giant_breath', 'rubble',
   'hook_fire', 'hook_hit_stone', 'hook_hit_wood', 'hook_hit_flesh', 'gas', 'slash', 'reel', 'nape_kill', 'body_hit', 'blade_swap', 'blade_break', 'gas_empty', 'grab', 'heartbeat',
   'giant_groan', 'giant_hurt', 'whoosh', 'steam_jet', 'crunch', 'steam', 'titan_step', 'titan_roar', 'titan_groan', 'cannon', 'giant_fall',
   'town_calm', 'crowd', 'war_bed'];
@@ -42,6 +42,7 @@ export async function create(ctx) {
   const renderAll = new Promise((resolve) => {
     startRender = () => {
       if (t0) return; t0 = performance.now();
+      try { ensureBank?.(); } catch (e) { console.warn('[audio] score bank', e); }
       const queue = ORDER.concat(Object.keys(SOUNDS).filter((n) => !ORDER.includes(n) && !LAZY.has(n)));
       const idle = () => new Promise((r) => (window.requestIdleCallback ? requestIdleCallback(() => r(), { timeout: 60 }) : setTimeout(r, 8)));
       const worker = async () => {
@@ -298,6 +299,25 @@ export async function create(ctx) {
     if (bellCheckT <= 0) { bellCheckT = 30; if (!recent.bell || simT - recent.bell.t > 45) { const bp = V(L.plaza?.x ?? 0, 34, L.plaza?.z ?? 0); for (let i = 0; i < 6; i++) setTimeout(() => play('bell', { position: bp }), i * 2300); } }
   }
 
+  // ------------------------------------------------ pass-by whooshes: skimming close past walls, houses or the Colossal
+  const pb = { L: 99, R: 99, C: 99, cd: 0, i: 0 }, _o = V(), _d = V(), _side = V();
+  function passBy(p, spd, dt) {
+    pb.cd -= dt; if (spd < 16) { pb.L = pb.R = pb.C = 99; return; }
+    const ph = ctx.physics; _o.copy(p.center || p.position);
+    const vol = THREE.MathUtils.clamp((spd - 14) / 30, 0.3, 1.2);
+    const fire = (pan) => { if (pb.cd > 0) return; pb.cd = 0.45; play('passby', { volume: vol, pan, rate: 0.85 + spd / 120 }); };
+    // alternate one sideways ray per frame (left/right of the velocity)
+    if (ph?.raycast) {
+      pb.i ^= 1; const side = pb.i ? 'L' : 'R';
+      _d.copy(p.velocity).normalize(); _side.set(-_d.z, 0, _d.x).normalize(); if (side === 'L') _side.negate();
+      let dist = 99; try { const h = ph.raycast(_o, _side, 14); if (h) dist = h.distance; } catch {}
+      if (dist < 7 && pb[side] >= 7) fire(_side.dot(mx.right) * 0.8);
+      pb[side] = dist;
+    }
+    const c = C();
+    if (c?.active) { const d = Math.min(_o.distanceTo(headPos()), c.nape?.position ? _o.distanceTo(c.nape.position) : 99); if (d < 22 && pb.C >= 22) fire(0); pb.C = d; }
+  }
+
   // ------------------------------------------------ per-frame
   const camPrev = V(); let camVel = 0;
   function update(dt, time, rawDt) {
@@ -318,6 +338,7 @@ export async function create(ctx) {
       const spd = own ? p.velocity.length() : Math.min(30, camVel * 0.5);
       const vd = own && spd > 1 ? _v.copy(p.velocity).normalize() : null;
       mx.updateWind(spd, listenerPos.y, vd ? vd.dot(mx.right) : 0, ctx.mode === 'paused' || ctx.mode === 'loading');
+      if (own && ctx.mode === 'play') passBy(p, spd, rdt);
       mx.update(t);
       flushFallbacks();
       updateDirector(rdt);
@@ -357,7 +378,7 @@ export async function create(ctx) {
       await renderAll;
       const oc = new OfflineAudioContext(2, Math.ceil(secs * 44100), 44100);
       const m = new Mixer(oc, { buffers, loopBuffers, wallRadius: 380 }); m.setListener(listener, V(0, 0, 1), V(0, 1, 0), 0); m.update(0);
-      if (state) { const sc = new Score(oc, m.g.music, buffers); sc.setState(state, 0); sc.schedule(secs); }
+      if (state) { await Score.ready?.(); const sc = new Score(oc, m.g.music, buffers); sc.setState(state, 0); sc.schedule(secs); }
       for (const [name, o] of loops) m.loop(name, o);
       if (wind) for (const [t, spd] of wind) m.updateWind(spd, listener.y, 0, false, t);
       for (const [t, name, o = {}] of script) m.play(name, { ...o, when: t });

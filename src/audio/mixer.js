@@ -57,6 +57,7 @@ export const MIX = {
   blade_swap: { g: 1.0, self: 1, send: 0.1, max: 2 },
   grab: { g: 0.9, self: 1, send: 0.2, max: 2 },
   crunch: { g: 1.0, ref: 10, send: 0.25, max: 3, rv: 0.08 },
+  passby: { g: 1.1, self: 1, send: 0.1, max: 3, rv: 0.08 },
   body_hit: { g: 1.4, self: 1, send: 0.1, max: 2, rv: 0.06 },
   heartbeat: { g: 0.8, self: 1, send: 0, max: 1, bus: 'ui' },
   ui_tick: { g: 0.25, bus: 'ui', send: 0.05, max: 3 },
@@ -258,6 +259,7 @@ export class Mixer {
   // ------------------------------------------------ bus control
   duck(k = 0.5, secs = 1.5, at = this.ac.currentTime) {
     const t = Math.max(at, this.ac.currentTime);
+    if (this.wind) { const p = this.wind.duck.gain; p.cancelScheduledValues(t); p.setTargetAtTime(1 - 0.7 * k, t, 0.04); p.setTargetAtTime(1, t + secs * 0.6, secs * 0.4); } // wind ducks under impacts
     for (const p of [this.g.musicDuck.gain, this.g.ambDuck.gain]) {
       const cur = p.value; if (1 - k > cur + 0.05 && t - this.ac.currentTime < 0.05) continue; // already ducked deeper
       p.cancelScheduledValues(t); p.setTargetAtTime(1 - k, t, 0.05); p.setTargetAtTime(1, t + secs, secs * 0.4);
@@ -300,7 +302,7 @@ export class Mixer {
     const src = ac.createBufferSource(); src.buffer = buf; src.loop = true; const end = buf._loopEnd || buf.duration; if (buf._loopEnd) { src.loopStart = 0; src.loopEnd = end; }
     src.start(ac.currentTime, Math.random() * end * 0.98);
     const mod = (rate, secs, seed, depth) => { const s = ac.createBufferSource(); s.buffer = smoothBuf(ac, rate, secs, seed); s.loop = true; s.start(); const gg = this._gain(depth); s.connect(gg); return gg; };
-    W.pan = ac.createStereoPanner(); W.out = this._gain((buf._gain ?? 1) * 0.45); W.pan.connect(W.out); W.out.connect(this.g.sfx);
+    W.pan = ac.createStereoPanner(); W.out = this._gain((buf._gain ?? 1) * 0.5); W.duck = this._gain(1); W.pan.connect(W.out); W.out.connect(W.duck); W.duck.connect(this.g.sfx);
     const layer = (nodes, amNode) => { const g = this._gain(0); let prev = src; for (const n of nodes) { prev.connect(n); prev = n; } if (amNode) { prev.connect(amNode); prev = amNode; } prev.connect(g); g.connect(W.pan); return g; };
     // gusting amplitude on the low layers
     const gust = this._gain(0.75); mod(0.35, 17, 7, 0.25).connect(gust.gain);
@@ -323,8 +325,8 @@ export class Mixer {
     const k = THREE.MathUtils.clamp((speed - 6) / 39, 0, 1.25), a = THREE.MathUtils.clamp((alt - 8) / 60, 0, 1);
     const set = (g, v, tc = 0.08) => g.gain.setTargetAtTime(mute ? 0 : v, t, tc);
     set(W.rumble, 0.5 * Math.pow(k, 0.7), 0.12);
-    set(W.body, 0.035 + 0.05 * a + 0.7 * Math.pow(k, 0.7));
-    set(W.rush, 0.75 * Math.pow(k, 2));
+    set(W.body, 0.035 + 0.05 * a + 0.9 * Math.pow(k, 0.4));
+    set(W.rush, 0.75 * Math.pow(k, 0.8));
     set(W.whis, 0.07 * Math.pow(k, 3));
     set(W.flap, 0.3 * Math.max(0, k - 0.3));
     set(W.buf, 0.7 * Math.max(0, k - 0.4));

@@ -24,7 +24,7 @@ const BSR = 32000;
 const NB = new Map(); // white-noise AudioBuffer per sample rate (context-independent)
 function noiseBuf(sr) {
   let b = NB.get(sr); if (b) return b;
-  const r = mulberry32(777 + sr), n = sr * 2; b = new AudioBuffer({ length: n, numberOfChannels: 1, sampleRate: sr });
+  const r = mulberry32(777 + sr), n = Math.round(sr * 1.25); b = new AudioBuffer({ length: n, numberOfChannels: 1, sampleRate: sr });
   const d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = r() * 2 - 1;
   NB.set(sr, b); return b;
 }
@@ -40,7 +40,7 @@ function K(oc, r) {
       if (delay > 0) { g.gain.setValueAtTime(0, 0); g.gain.linearRampToValueAtTime(depth, delay); } else g.gain.value = depth;
       o.connect(g); g.connect(param); return o;
     },
-    noise(t0 = 0) { const s = oc.createBufferSource(); s.buffer = noiseBuf(oc.sampleRate); s.loop = true; s.start(t0, r() * 1.8); return s; },
+    noise(t0 = 0) { const s = oc.createBufferSource(); s.buffer = noiseBuf(oc.sampleRate); s.loop = true; s.start(t0, r() * 1.1); return s; },
     shaper(drive) { const ws = oc.createWaveShaper(), n = 1024, c = new Float32Array(n), d = Math.tanh(drive); for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.tanh(drive * x) / d; } ws.curve = c; return ws; },
     chain(...ns) { for (let i = 0; i < ns.length - 1; i++) ns[i].connect(ns[i + 1]); return ns[ns.length - 1]; },
     env(param, pts) { param.setValueAtTime(pts[0][1], pts[0][0]); for (let i = 1; i < pts.length; i++) { const [t, v, kind] = pts[i]; if (kind === 'x') param.exponentialRampToValueAtTime(Math.max(1e-4, v), t); else if (kind === 'tc') param.setTargetAtTime(v, t, pts[i][3]); else param.linearRampToValueAtTime(v, t); } },
@@ -64,8 +64,8 @@ function bChoir(k, midi, male) {
       o.connect(vg); vg.connect(sum);
     }
     const wob = k.g(0.9); k.lfo(0.3 + r() * 0.3, 0.1, wob.gain); sum.connect(wob);
-    const br = k.chain(k.noise(), k.f('highpass', 900, 0.6), k.g(male ? 0.06 : 0.08)); br.connect(wob); // breath
-    const tilt = k.f('lowpass', male ? 1700 : 3000, 0.5); wob.connect(tilt);
+    const br = k.chain(k.noise(), k.f('highpass', 900, 0.6), k.g(male ? 0.07 : 0.1)); br.connect(wob); // breath
+    const tilt = k.f('lowpass', male ? 2000 : 4000, 0.5); wob.connect(tilt);
     const out = k.g(1), shift = side ? 1.035 : 0.965;
     for (const [F, Q, gg] of FM) { const bp = k.f('bandpass', Math.max(F, f0 * 1.15) * shift, Q); const g = k.g(gg * 3); tilt.connect(bp); bp.connect(g); g.connect(out); }
     k.chain(tilt, k.f('lowpass', male ? 380 : 650, 0.7), k.g(0.22), out);
@@ -275,7 +275,7 @@ async function renderItem(it) {
   const t3 = performance.now(); finish(buf, d); const t4 = performance.now();
   const sync = Math.max(t2 - t0, t4 - t3);
   bankStats.maxSyncMs = Math.max(bankStats.maxSyncMs, +sync.toFixed(2));
-  if (sync > 5) (bankStats.slow ||= []).push(`${it.fam}${it.m} ctx${(t1 - t0).toFixed(1)} build${(t2 - t1).toFixed(1)} fin${(t4 - t3).toFixed(1)}`);
+  if (sync > 5 && (bankStats.slow ||= []).length < 12) bankStats.slow.push(`${it.fam}${it.m} ctx${(t1 - t0).toFixed(1)} build${(t2 - t1).toFixed(1)} fin${(t4 - t3).toFixed(1)}`);
   const list = (BANK[it.fam] ||= []); list.push({ m: it.m, v: it.v, buf }); list.sort((a, b) => a.m - b.m);
   bankStats.done++;
 }
@@ -345,13 +345,13 @@ export const STATES = {
   breach: { bpm: 128, key: 0, prog: [[0, 'm'], [8, 'M'], [10, 'M'], [7, 'M']], phrase: 4, drums: 'breach', rel: 0.35, crash: true,
     A: { cF: 0.9, cM: 0.9, sL: 0.9, tr: 0.35, sp: 1, st: 'full', sn: 'drive', tone: 6000, att: 0.06 } },
   combat: { bpm: 128, key: 0, prog: P_MIN, phrase: 16, drums: 'combat', rel: 0.3, riser: 8, crash: true,
-    A: { cF: 0.35, cM: 0.6, sL: 0.8, sp: 0.85, hp: 0.25, st: 'sparse', tone: 2000, att: 0.15 },
+    A: { cF: 0.3, cM: 0.55, sL: 0.75, sp: 0.8, hp: 0.25, st: 'sparse', dk: 0.7, tone: 1800, att: 0.15 },
     B: { cF: 0.75, cM: 0.75, sL: 0.9, sp: 0.9, tr: 0.25, st: 'mid', sn: 'back', theme: ['horn'], tv: 1, tone: 6000, att: 0.08 } },
   boss2: { bpm: 134, key: 2, prog: P_MIN, phrase: 16, drums: 'boss2', rel: 0.3, riser: 8, crash: true,
-    A: { cF: 0.55, cM: 0.75, sL: 0.9, sp: 0.95, arp: 0.5, st: 'mid', sn: 'back', ch: 0.6, hp: 0.3, tone: 3500, att: 0.08 },
+    A: { cF: 0.5, cM: 0.7, sL: 0.85, sp: 0.9, arp: 0.5, st: 'mid', sn: 'back', ch: 0.6, hp: 0.3, dk: 0.8, tone: 3500, att: 0.08 },
     B: { cF: 0.8, cM: 0.85, sL: 0.95, sp: 0.95, tr: 0.35, st: 'full', sn: 'drive', theme: ['horn', 'choirF'], tv: 1, tone: 8000, att: 0.06 } },
   boss3: { bpm: 140, key: 3, prog: P_MIN, phrase: 16, drums: 'boss3', rel: 0.25, riser: 8, crash: true,
-    A: { cF: 0.7, cM: 0.85, sL: 1, sp: 1, arp: 0.6, tr: 0.3, st: 'full', sn: 'drive', ch: 0.7, theme: ['horn', 'strH'], tv: 0.95, br: 0.6, tone: 5000, att: 0.06 },
+    A: { cF: 0.65, cM: 0.8, sL: 1, sp: 1, arp: 0.6, tr: 0.3, st: 'mid', sn: 'back', ch: 0.7, theme: ['horn', 'strH'], tv: 0.9, br: 0.6, dk: 0.88, tone: 5000, att: 0.06 },
     B: { cF: 0.85, cM: 0.9, sL: 1, sp: 1, arp: 0.45, tr: 0.45, st: 'full', sn: 'drive', theme: ['horn', 'choirF', 'strH'], tv: 1, br: 0.75, tone: 9000, att: 0.05 } },
   death: { bpm: 60, key: 0, prog: [[0, 'm'], [0, 'm'], [8, 'M7'], [8, 'M7'], [5, 'm6'], [5, 'm6'], [7, 'sus'], [7, 'M']], phrase: 8, rel: 2,
     A: { cF: 0.3, sL: 0.4, sH: 0.15, tone: 900, att: 2 } },
@@ -362,10 +362,11 @@ export const STATES = {
 const RANK = { death: -1, calm: 0, title: 1, victory: 2, dread: 3, breach: 4, combat: 5, boss2: 6, boss3: 7 };
 // family playback trims (after bank normalisation: sustains at equal RMS, one-shots at equal peak)
 const TRIM = { choirF: 1.0, choirM: 0.9, strL: 0.8, strH: 0.6, trem: 0.5, spic: 0.85, horn: 1.2, stab: 1.0, braam: 0.6,
-  taiko: 0.6, gran: 0.6, odaiko: 0.7, shime: 0.35, snare: 0.32, crash: 0.38, swell: 0.4, impact: 0.8 };
-const OUT_GAIN = 3.1; // into the mixer's music bus (0.26) → master ≈ −10 dBFS peaks in the loudest states
+  taiko: 0.6, gran: 0.6, odaiko: 0.7, shime: 0.35, snare: 0.32, crash: 0.38, swell: 0.4, impact: 1.1 };
+const OUT_GAIN = 2.6; // into the mixer's music fader (g.music 0.12): music-only ≈ −22..−19 LUFS in combat/boss, peaks ≈ −9 dBFS
 
 export class Score {
+  static ready() { return ensureBank(); } // await before building a Score on an OfflineAudioContext (renders need the bank)
   constructor(ac, out, drums) {
     this.ac = ac; this.drums = drums || {}; this.state = null; this.target = null; this.queued = null;
     this.r = mulberry32(4242);
@@ -374,8 +375,8 @@ export class Score {
     const flt = (type, f, Q = 0.707, gain = 0) => { const b = ac.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = Q; b.gain.value = gain; return b; };
     this.out = g(OUT_GAIN); this.out.connect(out);
     // music master: HPF (no sub mud) → gentle glue → out
-    const comp = ac.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 2.5; comp.attack.value = 0.012; comp.release.value = 0.25; comp.knee.value = 8;
-    this.master = g(1); const hp = flt('highpass', 34, 0.7), lsh = flt('lowshelf', 110, 0.7, -2), pres = flt('highshelf', 3000, 0.7, 3);
+    const comp = ac.createDynamicsCompressor(); comp.threshold.value = -12; comp.ratio.value = 2; comp.attack.value = 0.012; comp.release.value = 0.25; comp.knee.value = 8;
+    this.master = g(1); const hp = flt('highpass', 34, 0.7), lsh = flt('lowshelf', 100, 0.7, -3.5), pres = flt('highshelf', 2500, 0.7, 4.5);
     this.master.connect(hp); hp.connect(lsh); lsh.connect(pres); pres.connect(comp); comp.connect(this.out);
     this.comp = comp;
     // hall (own convolver; IR built in chunks so the main thread never stalls)
@@ -394,7 +395,7 @@ export class Score {
       this.bus[k] = head;
     }
     this.bus.trem = this.bus.strH; this.bus.braam = this.bus.stab;
-    this.held = [];
+    this.held = []; this.themeQ = null;
     this.step = 0; this.bar = 0; this.nextTime = 0; this.cfg = STATES.title; this.sec = this.cfg.A; this.chord = null; this.fv = null;
     this.intensity = 0;
   }
@@ -443,7 +444,7 @@ export class Score {
     this._cut(t, name === 'death' ? 0.5 : up ? 0.12 : 0.9);
     this.chord = null;
     this.intensity = Math.max(0, (RANK[name] ?? 0) - 3) / 4;
-    if (prev && ((up && RANK[name] >= RANK.breach) || name === 'victory')) this._land(t, name === 'breach' || name === 'boss3' ? 1 : name === 'victory' ? 0.8 : 0.85);
+    if (prev && ((up && RANK[name] >= RANK.breach) || name === 'victory')) this._land(t, name === 'breach' || name === 'boss3' || name === 'victory' ? 1 : 0.85);
     if (name === 'death') { this._hit('gran', t, 0.9); this._hit('odaiko', t + 0.01, 0.7); }
   }
   _land(t, k) {
@@ -541,28 +542,32 @@ export class Score {
     const cfg = this.cfg, sd = this.stepDur, bar = this.bar, ph = cfg.phrase, pb = bar % ph, half = ph >= 16 ? 8 : ph;
     const sec = this.sec = ph >= 16 && pb >= 8 && cfg.B ? cfg.B : cfg.A;
     const c = this._chordInfo(bar);
-    const kD = DR[cfg.drums];
+    const kD = DR[cfg.drums], dk = sec.dk ?? 1;
     if (s === 0) {
       const secStart = pb % half === 0;
       if (secStart) this.tone.frequency.setTargetAtTime(sec.tone || 3000, t, 0.4);
       // pads: new chord (or new section) → hold until the chord changes
       const [d0, q0] = cfg.prog[bar % cfg.prog.length], [dp, qp] = cfg.prog[(bar - 1 + cfg.prog.length) % cfg.prog.length];
+      if (this.padMiss && bankStats.done > 0) { this._cut(t, 0.4); this.chord = null; } // bank was still rendering: (re)enter the pads now
       if (secStart || !this.chord || d0 !== dp || q0 !== qp) {
+        this.padMiss = !bankStats.ready;
         let nb = 1; while (nb < half - (pb % half) && cfg.prog[(bar + nb) % cfg.prog.length][0] === d0 && cfg.prog[(bar + nb) % cfg.prog.length][1] === q0) nb++;
         this._pads(t, c, nb * 16 * sd, sec, cfg);
       }
       this.chord = c;
       if (cfg.crash && pb % half === 0 && (pb > 0 || bar > 0) && (sec.theme || cfg.phrase <= 4)) this._hit('crash', t, 0.65, 'fx');
       if (sec.br && pb % 4 === 0) this.braam(t, c, sec.br);
+      this.themeQ = null;
       if (sec.theme) this._theme(t, pb % half, sec, cfg);
       if (cfg.riser && pb % cfg.riser === cfg.riser - 1 && !this.queued) this._riser(t + 16 * sd, 0.55 + 0.4 * this.intensity);
     }
+    if (this.themeQ) for (const n of this.themeQ.notes) if (n.st === s) this.themeQ.play(n);
     const hum = () => t + (this.r() - 0.5) * 0.006;
     if (kD) {
-      for (const [st, v] of kD.taiko || []) if (st === s) this._taiko(hum(), v * (0.9 + this.r() * 0.15));
-      for (const [st, v, ev = 1] of kD.gran || []) if (st === s && bar % ev === 0) this._hit('gran', t, v);
+      for (const [st, v] of kD.taiko || []) if (st === s && (dk >= 0.9 || v > 0.7)) this._taiko(hum(), dk * v * (0.9 + this.r() * 0.15));
+      for (const [st, v, ev = 1] of kD.gran || []) if (st === s && bar % (dk < 0.9 ? ev * 2 : ev) === 0) this._hit('gran', t, dk * v);
       for (const [st, v, ev = 1] of kD.odaiko || []) if (st === s && bar % ev === 0) this._hit('odaiko', t, v);
-      for (const [st, v] of kD.shime || []) if (st === s) this._hit('shime', hum(), v * (0.85 + this.r() * 0.3));
+      for (const [st, v] of kD.shime || []) if (st === s) this._hit('shime', hum(), dk * v * (0.85 + this.r() * 0.3));
     }
     if (sec.sn) for (const [st, v] of SNARE[sec.sn]) if (st === s) this._hit('snare', hum(), v);
     // phrase-end fill: shime + snare crescendo into the next section
@@ -602,21 +607,22 @@ export class Score {
     const R = up(c.root, 34), dur = Math.max(0.16, sd * 2.6);
     for (const [m, k] of [[R, 0.9], [R + 7, 0.75], [R + 12, 0.7], [up((c.root + c.third) % 12, 50), 0.5]]) this._note('stab', m, t, dur, v * k, { release: 0.1 });
   }
-  // theme bar `tb` (0..7) on the given instruments
-  _theme(t, tb, sec, cfg) {
-    const beat = 60 / cfg.bpm, T = up(this._tonic(), 60), slow = cfg.bpm < 90;
-    let tt = t;
-    for (const [semi, b] of THEME[tb % 8]) {
-      const iv = cfg.major ? (TO_MAJ[semi] ?? semi) : semi, d = b * beat;
+  // theme bar `tb` (0..7) on the given instruments. Live: each note is created on its own 16th (spreads the
+  // main-thread work across the bar); `all` = schedule the whole bar now (motif()).
+  _theme(t, tb, sec, cfg, all = false) {
+    const beat = 60 / cfg.bpm, T = up(this._tonic(), 60), slow = cfg.bpm < 90, q = [];
+    let off = 0;
+    for (const [semi, b] of THEME[tb % 8]) { q.push({ st: Math.round(off * 4), t: t + off * beat, m: T + (cfg.major ? (TO_MAJ[semi] ?? semi) : semi), d: b * beat }); off += b; }
+    const play = (n) => {
+      const a = slow ? 0.07 : 0.025, d = n.d * 0.97;
       for (const inst of sec.theme) {
-        if (inst === 'horn') { this._note('horn', T + iv, tt, d * 0.97, sec.tv * 0.95, { attack: slow ? 0.07 : 0.025, release: 0.18, hold: true }); this._note('horn', T + iv - 12, tt, d * 0.97, sec.tv * 0.45, { attack: slow ? 0.07 : 0.025, release: 0.18, hold: true }); }
-        else if (inst === 'choirF') this._note('choirF', T + iv, tt, d * 0.97, sec.tv * 0.6, { attack: 0.04, release: 0.2, hold: true });
-        else if (inst === 'strH') this._note('strH', T + iv + 12, tt, d * 0.97, sec.tv * 0.7, { attack: 0.04, release: 0.2, hold: true });
+        if (inst === 'horn') { this._note('horn', n.m, n.t, d, sec.tv * 0.95, { attack: a, release: 0.18, hold: true }); this._note('horn', n.m - 12, n.t, d, sec.tv * 0.45, { attack: a, release: 0.18, hold: true }); }
+        else if (inst === 'choirF') this._note('choirF', n.m, n.t, d, sec.tv * 0.6, { attack: 0.04, release: 0.2, hold: true });
+        else if (inst === 'strH') this._note('strH', n.m + 12, n.t, d, sec.tv * 0.7, { attack: 0.04, release: 0.2, hold: true });
       }
-      tt += d;
-    }
+    };
+    if (all) q.forEach(play); else this.themeQ = { notes: q, play };
   }
-
   // ---------------------------------------------------------------- one-shots used by index.js
   _q(steps = 1, min = 0.03) { // next grid point (multiple of `steps` 16ths) on the running clock
     const now = this.ac.currentTime, sd = this.stepDur;
@@ -663,7 +669,7 @@ export class Score {
   motif(when = this.ac.currentTime + 0.05, major = false) {
     const cfg = { ...this.cfg, bpm: Math.max(80, this.cfg.bpm || 80), major: major || this.cfg.major };
     const beat = 60 / cfg.bpm; let t = when;
-    for (let b = 0; b < 4; b++) { this._theme(t, b, { theme: ['horn'], tv: 0.9 }, cfg); t += 4 * beat; }
+    for (let b = 0; b < 4; b++) { this._theme(t, b, { theme: ['horn'], tv: 0.9 }, cfg, true); t += 4 * beat; }
   }
 }
 // lowest midi note >= lo with pitch class pc
