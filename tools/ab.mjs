@@ -1,5 +1,5 @@
 // Blind A/B compositor for critics.
-//   node tools/ab.mjs <ours.png> <bar.jpg> <out.jpg>
+//   bun tools/ab.mjs <ours.png> <bar.jpg> <out.jpg>
 // Places the two images side by side in random order, labels them only "A" and "B",
 // and writes the answer key to <out>.key (critic must not read it before judging).
 import { execFileSync } from 'node:child_process';

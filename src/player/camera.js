@@ -31,12 +31,13 @@ export async function create(ctx) {
     yaw: 0, pitch: 0, overrideK: 0,
     follow: new THREE.Vector3(), followV: new THREE.Vector3(), lag: new THREE.Vector3(), lagV: new THREE.Vector3(),
     lead: new THREE.Vector3(), leadV: new THREE.Vector3(), lastC: new THREE.Vector3(), pivCap: 99,
-    kc: null, deadYaw: 0, hidden: false,
+    kc: null, deadYaw: 0, hidden: false, lift: 0, liftV: 0, push: new THREE.Vector3(),
   };
   const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _fwd = new THREE.Vector3(), _right = new THREE.Vector3();
   const _pivot = new THREE.Vector3(), _pos = new THREE.Vector3(), _o = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
   const _e = new THREE.Euler(0, 0, 0, 'YXZ'), _m = new THREE.Matrix4();
   const EXCL = { exclude: ['titans', 'colossal'] };
+  const RING = [[0, 0], [0.42, 0], [-0.42, 0], [0, 0.42], [0, -0.42], [0.3, 0.3], [-0.3, 0.3], [0.3, -0.3], [-0.3, -0.3]];
   const aimDir = (yaw, pitch, out) => out.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
 
   function snap() { c.inited = false; }
@@ -63,7 +64,7 @@ export async function create(ctx) {
       const attached = p.hooks && (p.hooks[0]?.attached || p.hooks[1]?.attached);
       if (!c.inited || c.lastC.distanceToSquared(C) > 400) {
         c.follow.copy(C); c.followV.set(0, 0, 0); c.lag.set(0, 0, 0); c.lagV.set(0, 0, 0); c.lead.set(0, 0, 0); c.leadV.set(0, 0, 0);
-        c.yaw = p.yaw; c.pitch = p.pitch; c.dist = c.collDist = 4.6; c.distV = c.collDistV = 0; c.fov = 60; c.kc = null; c.pivCap = 99;
+        c.yaw = p.yaw; c.pitch = p.pitch; c.dist = c.collDist = 4.6; c.lift = 0; c.liftV = 0; c.push.set(0, 0, 0); c.distV = c.collDistV = 0; c.fov = 60; c.kc = null; c.pivCap = 99;
         c.inited = true;
       }
       c.lastC.copy(C);
@@ -134,15 +135,33 @@ export async function create(ctx) {
         if (L > 1e-3) { _v2.divideScalar(L); const h = ctx.physics.raycast(_o, _v2, L + 0.25, EXCL); const cap = h ? Math.max(0, h.distance - 0.25) : L + 0.25;
           c.pivCap = cap < c.pivCap ? cap : damp(c.pivCap, cap, 4, rdt);
           if (c.pivCap < L) pivot.copy(_o).addScaledVector(_v2, c.pivCap); } }
-      // collision along the boom (5 probes)
+      // ---- spring-arm collision: sphere-cast (ring of rays, r ~0.45 m) + lift over low obstructions (parapets)
       const back = _v3.copy(_fwd).negate();
-      let allowed = c.dist;
-      const probe = (ox, oy) => { _o.copy(pivot).addScaledVector(_right, ox); _o.y += oy; const h = ctx.physics.raycast(_o, back, c.dist + 0.4, EXCL); if (h) allowed = Math.min(allowed, Math.max(0.6, h.distance - 0.35)); };
-      probe(0, 0); probe(0.3, 0); probe(-0.3, 0); probe(0, 0.25); probe(0, -0.25);
-      if (allowed < c.collDist) { c.collDist = damp(c.collDist, allowed, 28, rdt); c.collDistV = 0; } else sd(c, 'collDist', allowed, 0.45, rdt);
+      const cast = (lift) => {
+        let a = c.dist;
+        for (let i = 0; i < RING.length; i++) {
+          _o.copy(pivot).addScaledVector(_right, RING[i][0]); _o.y += RING[i][1] + lift;
+          const h = ctx.physics.raycast(_o, back, c.dist + 0.6, EXCL);
+          if (h) a = Math.min(a, Math.max(0.7, h.distance - 0.5));
+        }
+        return a;
+      };
+      let allowed = cast(c.lift);
+      // obstructed low (parapet, roof ridge, crate)? see if a higher boom is clear and rise over it
+      let wantLift = 0;
+      if (allowed < c.dist - 0.4) { const hi = cast(c.lift + 1.1); if (hi > allowed + 0.6) { wantLift = Math.min(1.4, c.lift + 1.1); allowed = Math.max(allowed, hi); } }
+      else if (c.lift > 0.05) { const lo = cast(0); if (lo < c.dist - 0.4) wantLift = c.lift; } // stay up while the low arm is still blocked (hysteresis)
+      sd(c, 'lift', wantLift, wantLift > c.lift ? 0.18 : 0.6, rdt);
+      // distance with hysteresis: fast in, slow out, ignore tiny flickers
+      if (allowed < c.collDist - 0.03) { c.collDist = damp(c.collDist, allowed, 22, rdt); c.collDistV = 0; }
+      else if (allowed > c.collDist + 0.2) sd(c, 'collDist', allowed, 0.7, rdt);
       const boom = Math.min(c.collDist + 1.6 * Math.max(0, c.kick), Math.max(c.collDist, allowed));
-      _pos.copy(pivot).addScaledVector(back, boom);
-      const gy = (ctx.world?.groundHeight?.(_pos.x, _pos.z) ?? 0) + 0.35;
+      _pos.copy(pivot); _pos.y += c.lift; _pos.addScaledVector(back, boom);
+      // keep the lens >= 0.6 m (2x near plane) from any surface: push out, biased upward
+      { const r = ctx.physics.resolveSphere(_pos, 0.6, _v2, EXCL);
+        if (r && r.hits && r.hits.length) { _v2.y = Math.max(_v2.y, 0) + Math.abs(_v2.y) * 0.2; c.push.lerp(_v2, 0.35); } else c.push.multiplyScalar(Math.exp(-6 * rdt));
+        _pos.add(c.push); }
+      const gy = (ctx.world?.groundHeight?.(_pos.x, _pos.z) ?? 0) + 0.5;
       if (_pos.y < gy) _pos.y = gy;
       camera.position.copy(_pos);
       _e.set(pitch, yaw + Math.PI, 0, 'YXZ'); // three camera looks down -Z; yaw 0 = +Z

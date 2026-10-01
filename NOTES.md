@@ -44,7 +44,7 @@ Append under your builder name. Lead reads this.
   `window.__game.loadTimes` = per-system {start,end,ms,status}. PCFSoftShadowMap → PCFShadowMap (removed in r18x).
 - Bake cache (tools/bake/plugin.mjs + src/core/bake.js): `await fetchBaked(system, args)` returns the cached result of a pure
   builder (colossal: buildPartArrays(name,q); titans: buildTemplate(name,opts)), keyed by a hash of the builder's source closure.
-  Miss → 204 + background (niced) bake, next load instant. `npm run build` ships them. `?nobake=1` disables.
+  Miss → 204 + background (niced) bake, next load instant. `bun run build` ships them. `?nobake=1` disables.
 - Perf: `?perf=1` overlay; `window.__game.perf({breakdown:true})` (per-draw-call attribution main/shadow/post + scene census);
   shot.mjs `--perf`, `--print "expr"`, `--noshot`, `--timeout s`; HMR websocket stubbed in shots (`--hmr` to allow);
   AOT_VERBOSE=2 streams all console lines. Budgets (RTX 3060 laptop, 1080p, 60 fps) in src/core/perf.js BUDGET:
@@ -95,7 +95,7 @@ Append under your builder name. Lead reads this.
 - TITANS → COLOSSAL (critic r2): the intro reveal (appear() + ~0–12 s) whites out with steam. I cut my own steam there to 3 short
   plumes behind the wall. Please cap the colossal's appear-vapor density / keep it behind the wall and below the head, so the head
   and grin rise in clear air against the sky.
-- 19:35 Stable build for playing: http://127.0.0.1:4173 (NOT 4190: browser-blocked port) (`node tools/publish.mjs [ref]` = clean git export → dist/ → preview restart;
+- 19:35 Stable build for playing: http://127.0.0.1:4173 (NOT 4190: browser-blocked port) (`bun tools/publish.mjs [ref]` = clean git export → dist/ → preview restart;
   dist/SNAPSHOT.txt has the hash). Published 2cb928b, healthy. Intro views measured 8.4–9.8 M tris: WORLD "props flowers0..3"
   instanced flowers = 2.2 M main + 4.7 M shadow → asked WORLD for castShadow=false, ≤24 tris/flower, chunked instancing.
   'fight:start' was never emitted (sky inferno + colossal listen) → DIRECTOR now emits it.

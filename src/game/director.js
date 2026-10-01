@@ -252,11 +252,13 @@ export async function create(ctx) {
     cands.sort((a, b) => a[0] - b[0]);
     const eye = new THREE.Vector3(), dir = new THREE.Vector3(), chest = head.clone(); chest.y -= 16;
     const clear = (from, target) => { if (!ph?.raycast) return true; eye.copy(from); eye.y += 1.7; dir.copy(target).sub(eye); const L2 = dir.length(); dir.divideScalar(L2); const h2 = ph.raycast(eye, dir, L2, { exclude: ['titans', 'colossal', 'player'] }); return !h2 || h2.distance > L2 - 8; };
-    // WORLD-provided flat rooftop platforms win when in range with a clear view (closest to the ideal ~185 m first)
-    const vps = (ctx.world?.vantagePoints || []).map((v) => v?.isVector3 ? v : v?.position || v?.pos).filter((v) => v?.isVector3);
-    const ranked = vps.map((p) => [Math.abs(Math.hypot(p.x - head.x, p.z - head.z) - 185) + (prefer ? Math.hypot(p.x - prefer.x, p.z - prefer.z) * 0.3 : Math.random() * 20), p])
-      .filter(([, p]) => { const d = Math.hypot(p.x - head.x, p.z - head.z); return d > 120 && d < 260; }).sort((a, b) => a[0] - b[0]);
+    // WORLD-provided flat rooftop platforms win; house-roof terraces before watchtowers / belfries
+    const kindCost = (k) => (/watch|belfry|tower|spire/.test(k || '') ? 60 : 0);
+    const vps = (ctx.world?.vantagePoints || []).map((v) => ({ p: v?.isVector3 ? v : v?.position || v?.pos, kind: v?.kind || '' })).filter((v) => v.p?.isVector3);
+    const ranked = vps.map((v) => [kindCost(v.kind) + Math.abs(Math.hypot(v.p.x - head.x, v.p.z - head.z) - 185) * 0.5 + (prefer ? Math.hypot(v.p.x - prefer.x, v.p.z - prefer.z) * 0.3 : Math.random() * 20), v.p])
+      .sort((a, b) => a[0] - b[0]);
     for (const [, p] of ranked) if (clear(p, head)) return spotFacing(p.clone(), head);
+    if (ranked.length) return spotFacing(ranked[0][1].clone(), head); // a world platform even without a perfect sightline beats the wall
     // flattest standable roof point on the footprint (steep roofs make the player slide off)
     const roofSpot = (b) => {
       const bx = b.box; let best = null;

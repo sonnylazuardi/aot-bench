@@ -196,14 +196,40 @@ if (params.cam) {
   debugCam = { p: new THREE.Vector3(v[0], v[1], v[2]), t: new THREE.Vector3(v[3], v[4], v[5]) };
 }
 
+function applyResolution() {
+  renderer.setPixelRatio(quality.pixelRatio * quality.renderScale);
+  renderer.setSize(innerWidth, innerHeight);
+  ctx.post?.resize?.(innerWidth, innerHeight);
+}
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   quality.pixelRatio = pixelRatioFor(innerWidth, innerHeight);
-  renderer.setPixelRatio(quality.pixelRatio);
-  renderer.setSize(innerWidth, innerHeight);
-  ctx.post?.resize?.(innerWidth, innerHeight);
+  applyResolution();
 });
+
+// Adaptive resolution (perf): keeps the GPU under the 60 fps budget by scaling the render resolution in coarse steps
+// (render targets are reallocated, so it moves at most every ~1.5 s, with hysteresis). Reads the GPU timer query
+// (perf.gpuEma); without the extension it does nothing. ?dynres=0 disables, ?pr= pins the pixel ratio.
+quality.renderScale = 1;
+const dynres = { on: !shotMode && params.dynres !== '0' && !params.pr, min: qualityLevel === 'low' ? 0.6 : 0.7, hi: 13.6, lo: 10.2, overT: 0, underT: 0, cool: 3 };
+function updateDynRes(dt) {
+  if (!dynres.on) return;
+  const g = perf.gpuEma;
+  if (g == null || g < 0 || perf.gpuSamples < 30) return;
+  dynres.cool -= dt;
+  dynres.overT = g > dynres.hi ? dynres.overT + dt : 0;
+  dynres.underT = g < dynres.lo ? dynres.underT + dt : 0;
+  if (dynres.cool > 0) return;
+  let s = quality.renderScale;
+  if (dynres.overT > 0.4 && s > dynres.min) s = Math.max(dynres.min, s - (g > dynres.hi * 1.3 ? 0.15 : 0.075));
+  else if (dynres.underT > 2.5 && s < 1) s = Math.min(1, s + 0.075);
+  if (s !== quality.renderScale) {
+    quality.renderScale = +s.toFixed(3);
+    applyResolution();
+    dynres.overT = dynres.underT = 0; dynres.cool = 1.5;
+  }
+}
 
 // ---- test / screenshot hooks ----
 let frozen = !!params.freeze;
@@ -224,6 +250,44 @@ window.__game = {
   ready: null,
 };
 
+// Shader warm-up (perf): every program variant the game will ever use is linked behind the loader, not on first sight.
+// - compileAsync must run with an off-screen render target bound: the scene is drawn into the composer's HDR buffer,
+//   whose programs differ from the default-framebuffer (sRGB output) variants compile() would otherwise build.
+// - hidden objects (the Colossal before appear(), cinematic props, pools) are made visible for the warm-up so their
+//   main AND shadow-depth variants link; the cinematic DOF pass and the particle pools are switched on for one frame.
+async function warmShaders() {
+  const hidden = [];
+  scene.traverse((o) => { if (!o.visible && o !== scene) { hidden.push(o); o.visible = true; } });
+  if (ctx.post) ctx.post.warmup = true;
+  try {
+    const p = ctx.camera.position;
+    const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
+    const at = p.clone().addScaledVector(fwd, 30);
+    ctx.fx?.dust?.(at.clone(), 4); ctx.fx?.sparks?.(at.clone(), fwd.clone()); ctx.fx?.blood?.(at.clone(), fwd.clone());
+    ctx.fx?.debris?.(at.clone(), 4, 5); ctx.fx?.gasPuff?.(at.clone(), fwd.clone());
+    ctx._storyVapor?.emit?.({ pos: at.clone(), size: 3, life: 1 });
+    ctx._storyVapor?.update?.(1 / 60);
+  } catch (e) { console.warn('[load] warm-up fx', e); }
+  const rt = ctx.post?.composer?.inputBuffer;
+  const prevRT = renderer.getRenderTarget();
+  try {
+    if (rt) renderer.setRenderTarget(rt);
+    await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 25000))]);
+  } catch (e) { console.warn('[load] compileAsync', e); }
+  finally { renderer.setRenderTarget(prevRT); }
+  // warm-up frames under the loading screen: shadow depth variants, post passes, particles
+  loaderUI.step('Warming up…', 0.9);
+  for (let i = 0; i < 2; i++) {
+    await new Promise((r) => requestAnimationFrame(r));
+    try { render(1 / 60); } catch (e) { console.warn('[load] warm-up render', e); }
+  }
+  for (const o of hidden) o.visible = false;
+  if (ctx.post) ctx.post.warmup = false;
+  try { ctx.fx?.clear?.(); ctx._storyVapor?.clear?.(); } catch {}
+  await new Promise((r) => requestAnimationFrame(r));
+  try { render(1 / 60); } catch {}
+}
+
 const timer = new THREE.Timer();
 timer.connect?.(document);
 window.__game.ready = load().then(async () => {
@@ -235,12 +299,7 @@ window.__game.ready = load().then(async () => {
   const tc = performance.now();
   if (!shotMode && !params.nocompile) {
     loaderUI.step('Compiling shaders…', 0);
-    try { await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 20000))]); } catch {}
-    // warm-up frame under the loading screen: compiles what compileAsync can't see (shadow depth variants,
-    // post-processing passes, lazily created fx materials) so the hitch happens behind the loader, not in play
-    loaderUI.step('Warming up…', 0.9);
-    await new Promise((r) => requestAnimationFrame(r));
-    try { render(0); } catch (e) { console.warn('[load] warm-up render', e); }
+    await warmShaders();
   }
   loadTimes.shaders = { ms: Math.round(performance.now() - tc) };
   if (params.t) window.__game.advance(Number(params.t));
@@ -250,6 +309,7 @@ window.__game.ready = load().then(async () => {
     const dt = Math.min(timer.getDelta(), 1 / 20);
     if (!frozen) step(dt);
     render(dt);
+    updateDynRes(dt);
   });
   loaderUI.done(shotMode);
   document.body.dataset.ready = '1';

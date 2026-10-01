@@ -322,26 +322,47 @@ export function buildPart(ops, _unused, opts) {
   }
   const sb = opts.sigmaBone ?? 0.012, sm = opts.sigmaMat ?? 0.004;
   const skinIndex = new Uint16Array(nv * 4), skinWeight = new Float32Array(nv * 4);
-  const fib = new Float32Array(nv * 3), md = new Float32Array(nv * 4), md2 = new Float32Array(nv * 4);
+  const fib = new Float32Array(nv * 3), md = new Float32Array(nv * 4), md2 = new Float32Array(nv * 4), anc = new Float32Array(nv * 3);
   const nb = opts.boneCount || 64;
   const bw = new Float64Array(nb);
   const ddv = new Float64Array(local.length);
   const rng = [0, 0];
   const L = base.list;
+  const gidx = new Map(ops.map((o, i) => [o, i]));
+  const sSeam = opts.seamSigma ?? h * 1.5;
   for (let i = 0; i < nv; i++) {
     const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
     base.listRange(x, y, z, rng);
-    let dmin = 1e9;
+    let dmin = 1e9, dom = -1;
     for (let q = rng[0]; q < rng[1]; q++) {
       const o = local[L[q]];
       if (o.sub) { ddv[q - rng[0]] = 1e9; continue; }
       const bd = base.segDist(L[q], x, y, z);
       const di = bd > Math.min(dmin, 0.01) + sb * 6 ? 1e9 : o.d(x, y, z);
-      ddv[q - rng[0]] = di; if (di < dmin) dmin = di;
+      ddv[q - rng[0]] = di; if (di < dmin) { dmin = di; dom = q; }
+    }
+    // seam: second-nearest belly that runs a different way (or is fascia vs muscle) -> groove line between bellies
+    let d2 = 1e9;
+    if (dom >= 0) {
+      const od = local[L[dom]];
+      for (let q = rng[0]; q < rng[1]; q++) {
+        if (q === dom) continue;
+        const di = ddv[q - rng[0]]; if (di > 1e8 || di >= d2) continue;
+        const o = local[L[q]];
+        const par = (o.fib && od.fib) ? Math.abs(o.fib[0] * od.fib[0] + o.fib[1] * od.fib[1] + o.fib[2] * od.fib[2]) : 0;
+        if (par < 0.85 || Math.abs((o.tendon || 0) - (od.tendon || 0)) > 0.5) d2 = di;
+      }
     }
     bw.fill(0);
     let fx = 0, fy = 0, fz = 0, ten = 0, gum = 0, m2 = 0, m3 = 0, m4 = 0, wm = 0, fref = null;
     for (let q = rng[0]; q < rng[1]; q++) {
+      const o0 = local[L[q]];
+      if (o0.sub && o0.tendon) {   // tendon-tagged groove: paint only the carved surface itself (vertex lies inside the add union)
+        if (dmin > -h * 0.6) continue;
+        const ds = Math.abs(o0.d(x, y, z)); const w = Math.exp(-ds / sm);
+        if (w > 1e-3) { wm += w; ten += w * o0.tendon; }
+        continue;
+      }
       const di = ddv[q - rng[0]]; if (di > 1e8) continue;
       const o = local[L[q]];
       if (o.skin !== false) bw[o.bone] += Math.exp(-(di - dmin) / sb);
@@ -375,14 +396,27 @@ export function buildPart(ops, _unused, opts) {
     md[i * 4] = wm > 0 ? ten / wm : 0;
     md[i * 4 + 1] = wm > 0 ? gum / wm : 0;
     md[i * 4 + 2] = Math.max(0, Math.min(1, 1 - 1.6 * occ / wsum));
-    md[i * 4 + 3] = Math.random();
-    md2[i * 4] = wm > 0 ? m2 / wm : 0;
+    if (dom >= 0) {   // per-belly anchor: centre of the dominant op (closest axis point for cones/capsules)
+      const od = local[L[dom]];
+      if (od.sa) {
+        const A = od.sa, Bv = od.sb, bx = Bv[0] - A[0], by = Bv[1] - A[1], bz = Bv[2] - A[2];
+        const l2 = bx * bx + by * by + bz * bz;
+        const t = l2 > 1e-12 ? Math.max(0, Math.min(1, ((x - A[0]) * bx + (y - A[1]) * by + (z - A[2]) * bz) / l2)) : 0;
+        anc[i * 3] = A[0] + bx * t; anc[i * 3 + 1] = A[1] + by * t; anc[i * 3 + 2] = A[2] + bz * t;
+      } else { anc[i * 3] = od.bc[0]; anc[i * 3 + 1] = od.bc[1]; anc[i * 3 + 2] = od.bc[2]; }
+    } else { anc[i * 3] = x; anc[i * 3 + 1] = y; anc[i * 3 + 2] = z; }
+    md[i * 4 + 3] = dom >= 0 ? ((gidx.get(local[L[dom]]) ?? 0) * 0.6180339887) % 1 : 0.5;   // belly id (stable across parts)
+    md2[i * 4] = d2 < 1e8 ? Math.exp(-Math.max(0, d2 - dmin) / sSeam) : 0;                   // seam between bellies (was lip)
     md2[i * 4 + 1] = wm > 0 ? m3 / wm : 0;
     // curvature-ish cavity: sdf a little inside vs expected
     const ci = base(x - nx * h * 2, y - ny * h * 2, z - nz * h * 2);
     md2[i * 4 + 2] = Math.max(-1, Math.min(1, (ci + h * 2) / (h * 2)));
-    md2[i * 4 + 3] = wm > 0 ? m4 / wm : 0;
+    // signed mid-scale curvature (SDF Laplacian): convex +, concave -
+    const cr = opts.curvR ?? 0.012, f0c = base(x, y, z);
+    const lap = (base(x + cr, y, z) + base(x - cr, y, z) + base(x, y + cr, z) + base(x, y - cr, z) + base(x, y, z + cr) + base(x, y, z - cr) - 6 * f0c) / (cr * cr);
+    md2[i * 4 + 3] = Math.max(-1, Math.min(1, lap * cr * 0.5));
   }
+  if (opts.displace) displaceFibres(pos, nrm, fib, md, idx, opts.displace);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
@@ -391,6 +425,7 @@ export function buildPart(ops, _unused, opts) {
   geo.setAttribute('fibre', new THREE.BufferAttribute(fib, 3));
   geo.setAttribute('mdata', new THREE.BufferAttribute(md, 4));
   geo.setAttribute('mdata2', new THREE.BufferAttribute(md2, 4));
+  geo.setAttribute('manchor', new THREE.BufferAttribute(anc, 3));
   geo.setIndex(new THREE.BufferAttribute(nv > 65535 ? idx : new Uint16Array(idx), 1));
   geo.computeBoundingSphere();
   return geo;
@@ -402,3 +437,46 @@ export const boxRegion = (min, max) => (x, y, z) => {
   const qx = Math.abs(x - cx) - (max[0] - min[0]) / 2, qy = Math.abs(y - cy) - (max[1] - min[1]) / 2, qz = Math.abs(z - cz) - (max[2] - min[2]) / 2;
   return len3(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0);
 };
+
+// sculpted muscle-bundle relief: ridges running along each vertex's fibre direction, none on fascia plates.
+// Normals are re-derived from the displaced mesh and blended with the SDF normals.
+const vh = (x, y, z) => { const h = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return h - Math.floor(h); };
+function vnoise3(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  let xf = x - xi, yf = y - yi, zf = z - zi;
+  xf = xf * xf * (3 - 2 * xf); yf = yf * yf * (3 - 2 * yf); zf = zf * zf * (3 - 2 * zf);
+  const l = (a, b, t) => a + (b - a) * t;
+  return l(l(l(vh(xi, yi, zi), vh(xi + 1, yi, zi), xf), l(vh(xi, yi + 1, zi), vh(xi + 1, yi + 1, zi), xf), yf),
+    l(l(vh(xi, yi, zi + 1), vh(xi + 1, yi, zi + 1), xf), l(vh(xi, yi + 1, zi + 1), vh(xi + 1, yi + 1, zi + 1), xf), yf), zf);
+}
+function displaceFibres(pos, nrm, fib, md, idx, { amp = 0.001, freq = 60 } = {}) {
+  const nv = pos.length / 3;
+  for (let i = 0; i < nv; i++) {
+    const plate = Math.min(1, Math.max(0, md[i * 4])), gum = Math.min(1, Math.max(0, md[i * 4 + 1])), ao = md[i * 4 + 2];
+    const k = (1 - plate) * (1 - gum) * (0.35 + 0.65 * ao);
+    if (k < 0.02) continue;
+    const fx = fib[i * 3], fy = fib[i * 3 + 1], fz = fib[i * 3 + 2];
+    let x = pos[i * 3] * freq, y = pos[i * 3 + 1] * freq, z = pos[i * 3 + 2] * freq;
+    const a = (x * fx + y * fy + z * fz) * 0.88;
+    x -= fx * a; y -= fy * a; z -= fz * a;
+    const n1 = vnoise3(x, y, z), n2 = vnoise3(x * 2.3 + 5.1, y * 2.3, z * 2.3);
+    const ridge = (1 - Math.abs(n1 * 2 - 1)) * 0.75 + (1 - Math.abs(n2 * 2 - 1)) * 0.25;
+    const d = (ridge - 0.55) * amp * k;
+    pos[i * 3] += nrm[i * 3] * d; pos[i * 3 + 1] += nrm[i * 3 + 1] * d; pos[i * 3 + 2] += nrm[i * 3 + 2] * d;
+  }
+  // geometric normals of the displaced surface, blended with the SDF normals
+  const gn = new Float32Array(nv * 3);
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3;
+    const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2];
+    const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    for (const o of [a, b, c]) { gn[o] += nx; gn[o + 1] += ny; gn[o + 2] += nz; }
+  }
+  for (let i = 0; i < nv; i++) {
+    const l = Math.hypot(gn[i * 3], gn[i * 3 + 1], gn[i * 3 + 2]) || 1;
+    let x = gn[i * 3] / l * 0.65 + nrm[i * 3] * 0.35, y = gn[i * 3 + 1] / l * 0.65 + nrm[i * 3 + 1] * 0.35, z = gn[i * 3 + 2] / l * 0.65 + nrm[i * 3 + 2] * 0.35;
+    const m = Math.hypot(x, y, z) || 1;
+    nrm[i * 3] = x / m; nrm[i * 3 + 1] = y / m; nrm[i * 3 + 2] = z / m;
+  }
+}

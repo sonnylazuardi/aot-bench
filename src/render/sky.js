@@ -317,13 +317,13 @@ void main() {
 const BASE = {
   inf: 0, fire: 0, fireCol: [1.0, 0.36, 0.1], cloudBot: 1.35, cloudTop: 3.8, cloudAlb: 1.0, cloudFire: 0, cloudDens: 1.0,
   embers: 0, lightning: 0, sunDisc: 1.0, bloom: 1.0, cloudScale: 0.14, expo: 1.0, contrast: 0, shafts: 1, cirrus: 0.5,
-  sunEl: 16.3, sat: 1.0, skyTint2: [1, 1, 1], cloudBelly: [1, 1, 1], cloudStack: 0.15, cloudIso: 0.025, erode: 0.72,
+  sunEl: 16.3, sunAz: -21.5, sat: 1.0, skyTint2: [1, 1, 1], cloudBelly: [1, 1, 1], cloudStack: 0.15, cloudIso: 0.025, erode: 0.72,
 };
 const MOODS = {
   // battle phase 1: vivid saturated blue, crisp sunlit white cumulus, strong clean sun, clear air
   day: {
     ...BASE,
-    sunEl: 36, sunK: 1.1, sunTint: [0.97, 1.0, 1.08], skyK: 1.0, skyTint: [0.8, 0.96, 1.25], skyTint2: [0.86, 1.04, 1.12], aureole: 0.3, smoke: 0,
+    sunEl: 40, sunAz: 112, sunK: 1.1, sunTint: [0.97, 1.0, 1.08], skyK: 1.0, skyTint: [0.8, 0.96, 1.25], skyTint2: [0.86, 1.04, 1.12], aureole: 0.3, smoke: 0,
     haze: 1 / 26000, hazeFall: 1 / 1600, dust: 1 / 7000, dustFall: 1 / 35, dustTint: [0.82, 0.9, 1.0],
     sunScat: 0.5, dustSun: 0.5, cov: 0.38, cloudSun: 3.4, cloudAmb: 1.15, hemi: 1.0, env: 1.05,
     glow: [1.0, 0.88, 0.7], smokeCol: [0.22, 0.2, 0.2], cloudBelly: [0.78, 0.9, 1.18], cloudStack: 0.34, cloudIso: 0.06, erode: 0.82,
@@ -332,7 +332,7 @@ const MOODS = {
   // calm intro + battle phase 2: warm late sun
   golden: {
     ...BASE,
-    sunK: 1.0, sunTint: [1, 1, 1], skyK: 1.0, skyTint: [1, 1, 1], aureole: 1.0, smoke: 0,
+    sunEl: 22, sunAz: 98, sunK: 1.0, sunTint: [1, 1, 1], skyK: 1.0, skyTint: [1, 1, 1], aureole: 1.0, smoke: 0,
     haze: 1 / 15000, hazeFall: 1 / 1500, dust: 1 / 3200, dustFall: 1 / 45, dustTint: [0.92, 0.8, 0.64],
     sunScat: 1.0, dustSun: 1.0, cov: 0.36, cloudSun: 2.0, cloudAmb: 1.0, hemi: 1.0, env: 1.0,
     glow: [1.0, 0.55, 0.25], smokeCol: [0.22, 0.18, 0.15], cloudDens: 1.3, cloudScale: 0.16, sat: 1.1,
@@ -340,7 +340,7 @@ const MOODS = {
   // battle phase 3: soft pink / peach / lavender sky, luminous layered clouds, pastel aerial perspective
   afternoon: {
     ...BASE,
-    sunEl: 11, sunK: 0.88, sunTint: [1.0, 0.78, 0.74], skyK: 0.95, skyTint: [1.2, 0.76, 1.08], skyTint2: [1.42, 0.84, 0.86], aureole: 1.7, smoke: 0,
+    sunEl: 13, sunAz: 80, sunK: 0.88, sunTint: [1.0, 0.78, 0.74], skyK: 0.95, skyTint: [1.2, 0.76, 1.08], skyTint2: [1.42, 0.84, 0.86], aureole: 1.7, smoke: 0,
     haze: 1 / 6000, hazeFall: 1 / 1200, dust: 1 / 2600, dustFall: 1 / 70, dustTint: [1.0, 0.8, 0.9],
     sunScat: 1.7, dustSun: 1.3, cov: 0.32, cloudSun: 2.3, cloudAmb: 1.2, hemi: 0.95, env: 1.0,
     glow: [1.0, 0.56, 0.46], smokeCol: [0.22, 0.17, 0.18], cloudBelly: [1.65, 0.7, 0.92], cloudStack: 0.2, cloudIso: 0.05,
@@ -380,9 +380,10 @@ export async function create(ctx) {
   const data = new Float32Array(lutLow.length);
   const half = new Uint16Array(data.length);
   const sunT = [1, 1, 1], tA = [0, 0, 0], tB = [0, 0, 0];
-  let lutW = -1, sunElNow = LOW_EL, lutTex = null;
-  function setSunElevation(el) {
+  let lutW = -1, sunElNow = LOW_EL, sunAzNow = NaN, lutTex = null;
+  function setSunElevation(el, azDeg) {
     sunElNow = el;
+    if (azDeg !== undefined) { sunAzNow = azDeg; const a = THREE.MathUtils.degToRad(azDeg); sunAz.set(Math.sin(a), Math.cos(a)); }
     sunDir.set(sunAz.x * Math.cos(el), Math.sin(el), sunAz.y * Math.cos(el));
     const w = THREE.MathUtils.clamp((el - LOW_EL) / (HIGH_EL - LOW_EL), 0, 1);
     sunTransmittanceFast(el, MIE_LOW, tA); sunTransmittanceFast(el, MIE_HIGH, tB);
@@ -530,7 +531,7 @@ export async function create(ctx) {
   // ---- mood state -------------------------------------------------------------------------------------------
   let api = null;
   const cur = JSON.parse(JSON.stringify(MOODS.golden));
-  let target = MOODS.golden, moodName = 'golden', blendRate = 0.25, envDirty = 0, envTimer = 0;
+  let target = MOODS.golden, moodName = 'golden', blendRate = 0.25, envDirty = 0, envTimer = 0, blendT = 1, blendFrom = cur;
   const tmp3 = [0, 0, 0];
   const sunColor = new THREE.Color();
   const horizonColor = new THREE.Color();
@@ -540,8 +541,8 @@ export async function create(ctx) {
   function applyMood() {
     const m = cur;
     const el = THREE.MathUtils.degToRad(m.sunEl);
-    if (Math.abs(el - sunElNow) > 1e-4) {
-      setSunElevation(el);
+    if (Math.abs(el - sunElNow) > 1e-4 || Math.abs(m.sunAz - sunAzNow) > 1e-3) {
+      setSunElevation(el, m.sunAz);
       U.uAotSunDir.value.copy(sunDir); sun.position.copy(sunDir);
     }
     // sun light: top-of-atmosphere illuminance x transmittance x mood
@@ -660,6 +661,7 @@ export async function create(ctx) {
     setMood(name, secs = 6) {
       if (!MOODS[name]) return;
       moodName = name; target = MOODS[name]; blendRate = secs > 0 ? 1 / secs : 1e3;
+      blendFrom = JSON.parse(JSON.stringify(cur)); blendT = 0;
     },
     /** called by post before the scene render (exact camera incl. shake) */
     renderClouds(camera) {
@@ -691,12 +693,20 @@ export async function create(ctx) {
     },
     resize() { resize(); },
     update(dt, time, rawDt) {
-      const k = 1 - Math.exp(-(rawDt ?? dt) * blendRate * 3);
+      // perf: the blend is a bounded ease (from -> target over ~1/blendRate s) instead of an exponential chase that took
+      // ~16 s to fall under its epsilon (applyMood + LUT rebuild every frame and a PMREM re-bake every 2 s meanwhile)
       let changed = false;
-      for (const key in target) {
-        const tv2 = target[key], cv = cur[key];
-        if (Array.isArray(tv2)) { for (let i = 0; i < tv2.length; i++) { const d = tv2[i] - cv[i]; if (Math.abs(d) > 1e-5) { cv[i] += d * k; changed = true; } } }
-        else { const d = tv2 - cv; if (Math.abs(d) > 1e-7) { cur[key] += d * k; changed = true; } }
+      if (blendT < 1) {
+        blendT = Math.min(1, blendT + (rawDt ?? dt) * blendRate * 1.1);
+        const e = blendT * blendT * (3 - 2 * blendT);
+        for (const key in target) {
+          const tv2 = target[key], fv = blendFrom[key] ?? tv2;
+          if (cur[key] === undefined) cur[key] = Array.isArray(tv2) ? [...tv2] : tv2;
+          if (Array.isArray(tv2)) { const cv = cur[key]; for (let i = 0; i < tv2.length; i++) cv[i] = fv[i] + (tv2[i] - fv[i]) * e; }
+          else cur[key] = fv + (tv2 - fv) * e;
+        }
+        changed = true;
+        if (blendT >= 1) envTimer = 0;   // final env bake right away
       }
       if (changed) { applyMood(); envDirty = 1; }
       envTimer -= rawDt ?? dt;

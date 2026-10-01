@@ -20,12 +20,12 @@ export const MIX = {
   giant_giggle: { g: 1.35, ref: 60, roll: 0.7, send: 0.25, big: 0.35, echo: 0.15, lfe: 0.18, max: 2, rv: 0.04 },
   giant_breath: { g: 0.6, ref: 60, roll: 0.8, send: 0.2, big: 0.3, lfe: 0.06, max: 1 },
   giant_groan: { g: 1.35, ref: 70, roll: 0.7, send: 0.25, big: 0.4, echo: 0.2, lfe: 0.3, max: 3, rv: 0.05 },
-  giant_hurt: { g: 1.6, ref: 100, roll: 0.6, send: 0.25, big: 0.5, echo: 0.35, lfe: 0.36, max: 2, rv: 0.04, duck: 0.3 },
+  giant_hurt: { g: 1.6, ref: 100, roll: 0.6, send: 0.25, big: 0.5, echo: 0.35, lfe: 0.36, max: 2, rv: 0.04 },
   giant_bite: { g: 1.5, ref: 45, roll: 0.8, send: 0.3, big: 0.35, echo: 0.2, lfe: 0.18, max: 3, rv: 0.05 },
   giant_grab: { g: 1.3, ref: 45, roll: 0.8, send: 0.25, big: 0.3, lfe: 0.24, max: 3, rv: 0.06 },
   giant_fall: { g: 1.9, ref: 150, roll: 0.5, send: 0.3, big: 0.6, echo: 0.5, lfe: 0.6, width: 0.3, max: 1, duck: 0.5, phys: 1 },
   wall_crush: { g: 1.45, ref: 80, roll: 0.7, send: 0.3, big: 0.5, echo: 0.35, lfe: 0.36, max: 4, rv: 0.08, phys: 1 },
-  steam_blast: { g: 1.7, ref: 90, roll: 0.6, send: 0.25, big: 0.4, echo: 0.35, lfe: 0.18, max: 3, rv: 0.06, duck: 0.35, shock: 0.5 },
+  steam_blast: { g: 1.7, ref: 90, roll: 0.6, send: 0.25, big: 0.4, echo: 0.35, lfe: 0.18, max: 3, rv: 0.06, shock: 0.5 },
   steam_jet: { g: 1.1, ref: 55, roll: 0.8, send: 0.25, big: 0.3, lfe: 0.12, max: 4, rv: 0.08 },
   whoosh: { g: 1.3, ref: 50, roll: 0.8, send: 0.2, big: 0.2, lfe: 0.3, max: 4, rv: 0.1 },
   wall_break: { g: 2.0, ref: 160, roll: 0.5, send: 0.3, big: 0.7, echo: 0.6, lfe: 0.6, width: 0.35, max: 2, duck: 0.7, shock: 0.8, phys: 1 },
@@ -34,7 +34,7 @@ export const MIX = {
   rubble: { g: 1.0, ref: 40, roll: 1, send: 0.4, big: 0.25, echo: 0.15, lfe: 0.24, max: 5, rv: 0.1 },
   bell: { g: 0.9, ref: 80, roll: 0.8, send: 0.45, big: 0.4, echo: 0.4, max: 3 },
   scream: { g: 0.62, ref: 20, roll: 1, send: 0.45, big: 0.15, echo: 0.15, max: 5, rv: 0.08 },
-  crowd: { g: 0.55, ref: 80, roll: 1, send: 0.35, big: 0.2, width: 0.6, max: 2, bus: 'amb' },
+  crowd: { g: 0.4, ref: 80, roll: 1, send: 0.35, big: 0.2, width: 0.6, max: 2, bus: 'amb' },
   fire: { g: 0.9, ref: 14, roll: 1.1, send: 0.25, max: 10, bus: 'amb' },
   thunder: { g: 1.3, ref: 200, roll: 0.5, send: 0.3, big: 0.6, echo: 0.3, lfe: 0.36, width: 0.6, max: 2, rv: 0.1 },
   transform: { g: 1.9, ref: 220, roll: 0.5, send: 0.3, big: 0.6, echo: 0.5, lfe: 0.6, width: 0.4, max: 1, duck: 0.6, shock: 0.6 },
@@ -42,8 +42,8 @@ export const MIX = {
   titan_roar: { g: 1.2, ref: 45, roll: 0.9, send: 0.4, big: 0.3, echo: 0.2, max: 4, rv: 0.05 },
   titan_groan: { g: 0.9, ref: 25, roll: 1, send: 0.4, big: 0.2, max: 5, rv: 0.08 },
   steam: { g: 0.5, ref: 14, roll: 1, send: 0.25, max: 6, rv: 0.1 },
-  town_calm: { g: 0.15, bus: 'amb', max: 1, send: 0.1 },
-  war_bed: { g: 0.1, bus: 'amb', max: 1, send: 0.1 },
+  town_calm: { g: 0.1, bus: 'amb', max: 1, send: 0.1 },
+  war_bed: { g: 0.05, bus: 'amb', max: 1, send: 0.1 },
   hook_fire: { g: 1.5, self: 1, send: 0.12, max: 4, rv: 0.06 },
   hook_hit_stone: { g: 1.3, ref: 14, roll: 1, send: 0.3, big: 0.1, max: 4, rv: 0.1 },
   hook_hit_wood: { g: 1.3, ref: 14, roll: 1, send: 0.3, max: 4, rv: 0.1 },
@@ -58,6 +58,8 @@ export const MIX = {
   grab: { g: 0.9, self: 1, send: 0.2, max: 2 },
   crunch: { g: 1.0, ref: 10, send: 0.25, max: 3, rv: 0.08 },
   passby: { g: 1.1, self: 1, send: 0.1, max: 3, rv: 0.08 },
+  hit_confirm: { g: 1.4, self: 1, send: 0.25, big: 0.15, lfe: 0.3, max: 2 },
+  shout: { g: 0.7, ref: 25, roll: 1, send: 0.4, big: 0.15, echo: 0.15, max: 4, rv: 0.06 },
   body_hit: { g: 1.4, self: 1, send: 0.1, max: 2, rv: 0.06 },
   heartbeat: { g: 0.8, self: 1, send: 0, max: 1, bus: 'ui' },
   ui_tick: { g: 0.25, bus: 'ui', send: 0.05, max: 3 },
@@ -110,7 +112,7 @@ export class Mixer {
     g.ambDuck = this._gain(1); g.amb = this._gain(1); { const ls = this._filt('lowshelf', 80); ls.gain.value = -4; g.ambDuck.connect(ls); ls.connect(g.pre); } g.amb.connect(g.ambDuck);
     g.musicLP = this._filt('lowpass', 20000); g.musicLP.connect(g.pre);
     g.musicDuck = this._gain(1); g.musicDuck.connect(g.musicLP);
-    g.music = this._gain(0.12); g.music.connect(g.musicDuck);
+    g.music = this._gain(0.16); g.music.connect(g.musicDuck);
     // LFE: the ground-shaking sub layer of giant events (non-directional, gentle distance law)
     g.lfe = this._gain(1); const lfeLP = this._filt('lowpass', 110, 0.8), lfeHP = this._filt('highpass', 22, 0.7), lfeC = this._comp(-14, 4, 0.01, 0.4, 6);
     g.lfe.connect(lfeLP); lfeLP.connect(lfeHP); lfeHP.connect(lfeC); const lfeOut = this._gain(0.4); lfeC.connect(lfeOut); lfeOut.connect(g.pre);

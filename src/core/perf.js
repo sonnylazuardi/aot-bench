@@ -30,6 +30,7 @@ export function createPerf(renderer, scene, { overlay = false } = {}) {
   const tq = gl.getExtension?.('EXT_disjoint_timer_query_webgl2');
   const pending = [];
   let activeQ = null;
+  let gpuEma = -1, gpuSamples = 0;            // smoothed GPU frame time (adaptive resolution reads it)
   function gpuBegin() {
     if (!tq || activeQ || pending.length > 4) return;
     activeQ = gl.createQuery();
@@ -48,7 +49,7 @@ export function createPerf(renderer, scene, { overlay = false } = {}) {
       if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
       const ns = gl.getQueryParameter(q, gl.QUERY_RESULT);
       pending.shift(); gl.deleteQuery(q);
-      if (!disjoint) { win.gpu += ns / 1e6; win.gpuN++; }
+      if (!disjoint) { const ms = ns / 1e6; win.gpu += ms; win.gpuN++; gpuEma = gpuEma < 0 ? ms : gpuEma * 0.85 + ms * 0.15; gpuSamples++; }
     }
   }
 
@@ -243,5 +244,8 @@ export function createPerf(renderer, scene, { overlay = false } = {}) {
       return r;
     },
     breakdown, census, setOverlay, get overlay() { return !!box; },
+    /** smoothed GPU ms per frame (-1 until the timer query reports; null without EXT_disjoint_timer_query) */
+    get gpuEma() { return tq ? gpuEma : null; },
+    get gpuSamples() { return gpuSamples; },
   };
 }

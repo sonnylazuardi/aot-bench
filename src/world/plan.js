@@ -232,7 +232,7 @@ export function makePlan(seed = 1847) {
     return ok;
   };
   for (const t of [
-    { kind: 'watchtower', x: -24, z: 226, w: 7.5, d: 7.5, top: 24 },
+    { kind: 'watchtower', x: -24, z: 226, w: 8, d: 8, top: 24 },
     { kind: 'guildflat', x: 27, z: 202, w: 16, d: 12, top: 15.2 },
     { kind: 'belfry', x: 30, z: 160, w: 8, d: 8, top: 27 },
     { kind: 'guildflat', x: -29, z: 170, w: 14, d: 11, top: 12.8 },

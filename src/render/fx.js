@@ -243,15 +243,15 @@ const FIELDS = ['px', 'py', 'pz', 'vx', 'vy', 'vz', 'age', 'life', 's0', 's1', '
   'fin', 'fout', 'cr', 'cg', 'cb', 'cell', 'shade', 'emis', 'stretch', 'turb', 'wind', 'kind', 'seed', 'gnd', 'gy'];
 class Pool {
   constructor(n) {
-    this.n = n; this.count = 0;
+    this.n = n; this.count = 0; this.cap = n;   // cap: soft live limit (perf; adjusted per game mode)
     for (const f of FIELDS) this[f] = new Float32Array(n);
     this.arrs = FIELDS.map((f) => this[f]);
   }
   alloc() {
-    if (this.count < this.n) return this.count++;
+    if (this.count < Math.min(this.cap, this.n)) return this.count++;
     // full: recycle the particle closest to death
     let best = 0, bv = -1;
-    for (let k = 0; k < 24; k++) { const i = (Math.random() * this.n) | 0; const v = this.age[i] / this.life[i]; if (v > bv) { bv = v; best = i; } }
+    for (let k = 0; k < 24; k++) { const i = (Math.random() * this.count) | 0; const v = this.age[i] / this.life[i]; if (v > bv) { bv = v; best = i; } }
     return best;
   }
   kill(i) {
@@ -486,7 +486,9 @@ export async function create(ctx) {
   const flashLight = new THREE.PointLight(0xffe0b0, 0, 900, 2);
   flashLight.name = 'fxFlash';
   const fireLights = [new THREE.PointLight(0xff8a3a, 0, 45, 2), new THREE.PointLight(0xff8a3a, 0, 45, 2)];
-  scene.add(flashLight, ...fireLights);
+  // perf: the two fire point lights stay OUT of the scene (no burning town any more; two always-on point lights in
+  // every lit shader cost GPU on every pixel). updateFireLights still drives them harmlessly.
+  scene.add(flashLight);
   let flashE = 0, flashDecay = 3;
 
   // ---- debris (instanced, main scene) -----------------------------------------------------------------------
@@ -1335,6 +1337,8 @@ export async function create(ctx) {
       // timeline
       for (let i = 0; i < timeline.length; i++) if (timeline[i].t <= now) { const e = timeline[i]; timeline.splice(i, 1); i--; try { e.fn(); } catch (err) { console.error('[fx] timeline', err); } }
       for (const e of emitters) if (!e._update(dt)) emitters.delete(e);
+      // perf: soft live-particle caps (the intro's breach/steam/dust pile up to the 7000 hard cap -> 35-45 fps)
+      smoke.cap = Math.round((ctx.mode === 'play' ? 2500 : 4000) * QK); glow.cap = Math.round(1500 * QK);
       stepPool(smoke, dt);
       stepPool(glow, dt);
       updateDebris(dt);

@@ -38,13 +38,13 @@ BUILDINGS STAY INTACT: houses never collapse (no crushing by the giant, boulders
 
 ## Run / see it
 - Dev server is already running at **http://127.0.0.1:5190** (Vite HMR). Do NOT start another one on 5190.
-- Screenshot: `node tools/shot.mjs --url "/?skip=1" --out shots/<you>/<name>.png [--advance 3] [--wait 1500] [--eval "js"] [--seq 6 --every 0.5]`
+- Screenshot: `bun tools/shot.mjs --url "/?skip=1" --out shots/<you>/<name>.png [--advance 3] [--wait 1500] [--eval "js"] [--seq 6 --every 0.5]`
   - Prints page console errors. Headless GPU may be software — FPS it prints is NOT real; judge visuals, not fps.
   - `window.__game.advance(seconds)` steps the simulation at fixed 60 Hz then renders once (use it to fast-forward).
   - `window.__game.setCam([x,y,z],[tx,ty,tz])` or URL `?cam=x,y,z,tx,ty,tz` pins a debug camera.
   - `window.__ctx` is the live ctx.
 - URL params: `skip=1` straight to gameplay · `intro=1` straight to the breach cinematic · `only=sky,world` load only those systems (others stub) · `q=low|medium|high` · `t=secs` advance after load · `freeze=1` no real-time stepping (only `advance`).
-- Check the page never throws: `node tools/shot.mjs` prints `[pageerror]` / `[error]` lines.
+- Check the page never throws: `bun tools/shot.mjs` prints `[pageerror]` / `[error]` lines.
 
 ## Ownership (edit ONLY your files; never edit another builder's files or src/main.js / src/core/*)
 | System (ctx key) | Files | Builder |

@@ -1,6 +1,6 @@
 // Push the current HEAD tree to the public repo as ONE new commit on top of origin/main.
 // Local history (which once contained third-party reference images) is never pushed.
-//   node tools/push-public.mjs "message"
+//   bun tools/push-public.mjs "message"
 import { execSync } from 'node:child_process';
 const sh = (c) => execSync(c, { encoding: 'utf8' }).trim();
 const msg = process.argv[2] || `Update: ${sh('git log -1 --format=%s')}`;

@@ -46,40 +46,48 @@ export async function create(ctx) {
   // clear sightline; otherwise the flat wall walkway at x=-150 (pitched roofs make the player slide off).
   const DOWN = V(0, -1, 0);
   function vantage() {
-    const hd = head(V()), B = ctx.world?.buildings || [], ph = ctx.physics;
-    const ex = { exclude: ['titans', 'colossal', 'player'] };
-    const wall = () => {
-      const r = W.radius + W.thickness / 2, x = -150, z = Math.sqrt(r * r - x * x);
-      let y = W.walkwayY ?? W.height;
-      const h = safe(() => ph?.raycast?.(V(x, y + 20, z), DOWN, 40, ex));
-      if (h && h.point.y > y - 6) y = h.point.y;
-      return V(x, y, z);
+    const hd = head(V()), ph = ctx.physics;
+    const ex = { exclude: ['titans', 'colossal', 'player', 'civilians'] };
+    const gate = L.outerGate;
+    const eye = V(), dir = V();
+    const clear = (from, target) => {
+      if (!ph?.raycast) return true;
+      eye.copy(from); eye.y += 1.7; dir.copy(target).sub(eye); const L2 = dir.length(); dir.divideScalar(L2);
+      const h2 = safe(() => ph.raycast(eye, dir, L2, ex)); return !h2 || h2.distance > L2 - 8;
     };
-    if (!ph?.raycast) return wall();
-    const cands = [];
-    for (const b of B) {
-      if (b.destroyed || !b.box) continue;
-      const h = b.box.max.y; if (h < 12 || h > 28) continue;
-      const c = b.center || b.box.getCenter(new THREE.Vector3());
-      const d = Math.hypot(c.x - hd.x, c.z - hd.z);
-      if (d < 145 || d > 235 || Math.hypot(c.x, c.z) > 330) continue;
-      cands.push([Math.abs(d - 185) * 0.6 + Math.abs(h - 19) * 1.5, b]);
-    }
-    cands.sort((a, b) => a[0] - b[0]);
-    const eye = V(), dir = V(), chest = hd.clone(); chest.y -= 16;
-    const clear = (from, target) => { eye.copy(from); eye.y += 1.7; dir.copy(target).sub(eye); const L2 = dir.length(); dir.divideScalar(L2); const h2 = ph.raycast(eye, dir, L2, ex); return !h2 || h2.distance > L2 - 8; };
-    const flat = (p) => { for (const [dx, dz] of [[1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2]]) { const h = ph.raycast(V(p.x + dx, p.y + 4, p.z + dz), DOWN, 8, ex); if (!h || h.normal.y < 0.8 || Math.abs(h.point.y - p.y) > 0.35) return false; } return true; };
-    for (const [, b] of cands.slice(0, 30)) {
-      const bx = b.box; let best = null;
-      for (const [u, w] of [[0.5, 0.5], [0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]]) {
-        const hit = ph.raycast(V(lerp(bx.min.x, bx.max.x, u), bx.max.y + 6, lerp(bx.min.z, bx.max.z, w)), DOWN, 40, ex);
-        if (hit && hit.point.y > 8 && (!best || hit.normal.y > best.normal.y)) best = hit;
+    const offWall = (p) => Math.hypot(p.x, p.z) < W.radius - 20;
+    // 1) WORLD's flat perches: house-roof terraces first (guild halls), then belfry/towers; never the wall
+    const vps = (ctx.world?.vantagePoints || []).map((v) => ({ p: v?.isVector3 ? v : v?.position || v?.pos, kind: v?.kind || '' }))
+      .filter((v) => v.p?.isVector3 && v.p.y >= 12 && v.p.y <= 28 && offWall(v.p));
+    const score = (v) => {
+      const dg = Math.hypot(v.p.x - gate.x, v.p.z - gate.z);
+      const house = /guild|flat|terrace|roof|house/i.test(v.kind) ? 0 : /belfry/i.test(v.kind) ? 40 : 80;
+      return house + Math.abs(dg - 190) * 0.5 + (dg < 150 || dg > 230 ? 60 : 0);
+    };
+    vps.sort((a, b2) => score(a) - score(b2));
+    for (const v of vps) if (clear(v.p, hd)) return v.p.clone();
+    if (vps.length) return vps[0].p.clone();
+    // 2) any flat standable roof 12–28 m up in range (raycast-checked), off the wall
+    const B = ctx.world?.buildings || [];
+    if (ph?.raycast) {
+      const flat = (p) => { for (const [dx, dz] of [[1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2]]) { const h = ph.raycast(V(p.x + dx, p.y + 4, p.z + dz), DOWN, 8, ex); if (!h || h.normal.y < 0.8 || Math.abs(h.point.y - p.y) > 0.35) return false; } return true; };
+      const cands = [];
+      for (const b of B) {
+        if (b.destroyed || !b.box) continue;
+        const h = b.box.max.y; if (h < 12 || h > 28) continue;
+        const c = b.center || b.box.getCenter(new THREE.Vector3());
+        const dg = Math.hypot(c.x - gate.x, c.z - gate.z);
+        if (dg < 145 || dg > 235 || !offWall(c)) continue;
+        cands.push([Math.abs(dg - 185), b]);
       }
-      if (!best || best.normal.y < 0.8) continue;
-      const pos = best.point.clone();
-      if (safe(() => flat(pos) && clear(pos, hd) && clear(pos, chest))) return pos;
+      cands.sort((a2, b2) => a2[0] - b2[0]);
+      for (const [, b] of cands.slice(0, 30)) {
+        const hit = ph.raycast(V((b.box.min.x + b.box.max.x) / 2, b.box.max.y + 6, (b.box.min.z + b.box.max.z) / 2), DOWN, 40, ex);
+        if (hit && hit.normal.y > 0.8 && hit.point.y >= 12 && safe(() => flat(hit.point)) && clear(hit.point, hd)) return hit.point.clone();
+      }
     }
-    return wall();
+    // 3) last resort: a known guild-hall roof terrace position from the town plan
+    return V(27, 15.2, 202);
   }
 
   // ------------------------------------------------------------------ state
@@ -92,7 +100,11 @@ export async function create(ctx) {
     start, skip, playFight, update,
     get time() { return S.t; },
     get _shot() { return S.shot; },
-    get handoffSpot() { return S.playerSpot; },
+    get handoffSpot() {
+      const p = S.playerSpot; if (!p) return null;
+      const hd = head(V());
+      return { position: p, pos: p, yaw: Math.atan2(hd.x - p.x, hd.z - p.z), pitch: 0.12 };
+    },
   };
 
   // full-screen flash overlay that decays by simulation time in update() (post.flash only decays per render call)

@@ -708,14 +708,20 @@ function buildGuildFlat(gb, lot, r, solids, b) {
   gb.box(x0 - 0.35, H - 0.3, z0 - 0.35, x1 + 0.35, H, z1 + 0.35, 63 & ~4);
   gb.set({ mat: 4, p2: 0.55, col: lin(0x9a9282) });
   gb.poly([[x0, H, z1], [x1, H, z1], [x1, H, z0], [x0, H, z0]]);
-  parapetRing(gb, solids, b, lot, x0 - 0.2, z0 - 0.2, x1 + 0.2, z1 + 0.2, H, 1.15, 0.45, 4, stone);
+  // low curb parapet (0.7 m) with a coping ring - keeps third-person cameras clear
+  parapetRing(gb, solids, b, lot, x0 - 0.2, z0 - 0.2, x1 + 0.2, z1 + 0.2, H, 0.62, 0.45, 4, stone);
   gb.set({ mat: 4, p2: 0.3, col: lin(0xd2c6ac) });
-  gb.box(x0 - 0.3, H + 1.15, z0 - 0.3, x1 + 0.3, H + 1.3, z1 + 0.3, 4);
+  for (const [a0, c0, a1, c1] of [[x0 - 0.3, z1 - 0.3, x1 + 0.3, z1 + 0.3], [x0 - 0.3, z0 - 0.3, x1 + 0.3, z0 + 0.3], [x0 - 0.3, z0 + 0.3, x0 + 0.3, z1 - 0.3], [x1 - 0.3, z0 + 0.3, x1 + 0.3, z1 - 0.3]]) gb.box(a0, H + 0.62, c0, a1, H + 0.72, c1, 63);
   // roof access kiosk in a back corner + flag
   gb.set({ mat: 0, col: plaster, p0: 2.6, p1: 2.6, p2: 2.6, p3: bitsOf(0, TS.PLASTER, 1, { door: true }) });
-  gb.box(x1 - 3.2, H, z0 + 0.5, x1 - 0.6, H + 2.6, z0 + 3.1, 1 | 2 | 16 | 32);
+  // in the corner farthest from the outer gate (keeps the view to the fight clear)
+  let kx = x1 - 1.9, kz = z0 + 1.8, kd = -1;
+  for (const [cx2, cz2] of [[x1 - 1.9, z0 + 1.8], [x0 + 1.9, z0 + 1.8], [x1 - 1.9, z1 - 1.8], [x0 + 1.9, z1 - 1.8]]) {
+    const d = Math.hypot(gb.wx(cx2, cz2), gb.wz(cx2, cz2) - 380);
+    if (d > kd) { kd = d; kx = cx2; kz = cz2; }
+  }
+  gb.box(kx - 1.3, H, kz - 1.3, kx + 1.3, H + 2.6, kz + 1.3, 1 | 2 | 16 | 32);
   gb.set({ mat: 1, p3: 2, col: lin(0x3f4a4c) });
-  const kx = x1 - 1.9, kz = z0 + 1.8;
   for (let i = 0; i < 4; i++) { const a0 = (i / 4) * Math.PI * 2 + Math.PI / 4, a1 = ((i + 1) / 4) * Math.PI * 2 + Math.PI / 4; gb.poly([[kx + Math.cos(a1) * 2.0, H + 2.6, kz + Math.sin(a1) * 2.0], [kx + Math.cos(a0) * 2.0, H + 2.6, kz + Math.sin(a0) * 2.0], [kx, H + 4.0, kz]]); }
   flag(gb, x0 + 1.2, z0 + 1.2, H, 6, r.pick([lin(0x8a1c1c), lin(0x2a4a7a), lin(0x2f5a2a)]));
   b.solids.push(solids.addBox(gb.wx(0, 0), H / 2, gb.wz(0, 0), W / 2, H / 2, D / 2, lot.a, 'building', b));
@@ -753,10 +759,8 @@ function buildLookoutTower(gb, lot, r, solids, b) {
     gb.set({ mat: 5, col: lin(0x3c4044) });
     gb.poly([[-hw - 0.5, H, hw + 0.5], [hw + 0.5, H, hw + 0.5], [hw + 0.5, H, -hw - 0.5], [-hw - 0.5, H, -hw - 0.5]]);
     pw = hw + 0.5;
-    parapetRing(gb, solids, b, lot, -pw, -pw, pw, pw, H, 0.8, 0.4, 4, stone);
+    parapetRing(gb, solids, b, lot, -pw, -pw, pw, pw, H, 0.7, 0.4, 4, stone);
     gb.set({ mat: 5, col: lin(0x1c1b1a) });
-    for (let i = 0; i < 4; i++) { const s = i < 2 ? 1 : -1, ax = i % 2 === 0; if (ax) gb.box(-pw, H + 1.1, s * pw - 0.03, pw, H + 1.16, s * pw + 0.03, 63); else gb.box(s * pw - 0.03, H + 1.1, -pw, s * pw + 0.03, H + 1.16, pw, 63); }
-    for (const [px, pz] of [[-pw, -pw], [pw, -pw], [-pw, pw], [pw, pw]]) gb.box(px - 0.04, H + 0.8, pz - 0.04, px + 0.04, H + 1.16, pz + 0.04, 63);
     flag(gb, -pw + 0.6, -pw + 0.6, H, 5, lin(0x7a1a1a));
   } else {
     // corbelled machicolation band carrying a wider fighting platform with merlons
@@ -768,7 +772,7 @@ function buildLookoutTower(gb, lot, r, solids, b) {
     gb.set({ mat: 4, p2: 0.5, col: lin(0x8f887a) });
     gb.poly([[-cb, H, cb], [cb, H, cb], [cb, H, -cb], [-cb, H, -cb]]);
     pw = cb;
-    parapetRing(gb, solids, b, lot, -cb, -cb, cb, cb, H, 1.5, 0.45, 4, stone, true);
+    parapetRing(gb, solids, b, lot, -cb, -cb, cb, cb, H, 0.75, 0.45, 4, stone, true);
     flag(gb, cb - 0.8, -cb + 0.8, H, 6.5, lin(0x2a4a7a));
   }
   const cx = gb.wx(0, 0), cz = gb.wz(0, 0);

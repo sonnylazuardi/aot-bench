@@ -1,5 +1,5 @@
 // Headless screenshot tool for builders and critics.
-//   node tools/shot.mjs --url "/?skip=1" --out shots/x.png [--wait 1500] [--advance 3] [--w 1600 --h 900]
+//   bun tools/shot.mjs --url "/?skip=1" --out shots/x.png [--wait 1500] [--advance 3] [--w 1600 --h 900]
 //                       [--eval "js run in page after ready"] [--seq 5 --every 0.5]  (sequence of frames, advancing sim)
 //                       [--noshot] (health check, no screenshot) [--print "js expr"] (JSON of the value after --advance/--wait) [--perf] (print window.__game.perf({breakdown:true}) as JSON) [--timeout 240] (s to wait for ready)
 //                       [--profile [out.cpuprofile]] (main-thread CPU profile to ready: hotspots by file/function)

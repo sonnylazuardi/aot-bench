@@ -3,11 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5190 --host 127.0.0.1",
-    "build": "vite build",
-    "preview": "vite preview --port 4173 --host 127.0.0.1",
-    "shot": "node tools/shot.mjs",
-    "deploy": "npm run build && npx wrangler deploy"
+    "dev": "bun node_modules/vite/bin/vite.js --port 5190 --host 127.0.0.1",
+    "build": "bun node_modules/vite/bin/vite.js build",
+    "preview": "bun node_modules/vite/bin/vite.js preview --port 4173 --host 127.0.0.1",
+    "shot": "bun tools/shot.mjs",
+    "health": "bun tools/health.mjs",
+    "publish": "bun tools/publish.mjs",
+    "ab": "bun tools/ab.mjs",
+    "push-public": "bun tools/push-public.mjs",
+    "deploy": "bun run build && bunx wrangler deploy"
   },
   "dependencies": {
     "n8ao": "^2.0.1",
@@ -17,5 +21,9 @@
   "devDependencies": {
     "playwright": "^1.58.0",
     "vite": "^8.3.0"
+  },
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "bun": ">=1.4.2"
   }
 }

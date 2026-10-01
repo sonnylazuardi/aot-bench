@@ -1,4 +1,4 @@
-// Child process: node tools/bake/worker.mjs <entryAbsPath> <exportName> <argsJson> <outFile>
+// Child process: bun tools/bake/worker.mjs <entryAbsPath> <exportName> <argsJson> <outFile>
 // Imports the builder module, runs it, writes the encoded result atomically.
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';

@@ -1,186 +1,31 @@
 {
- "percent": 92,
- "phase": "USER FEEDBACK round: epic blue day \u2192 golden \u2192 pink afternoon sky, no fires, houses stay intact",
+ "percent": 0,
+ "phase": "Gauntlet: Colossal Titan AAA (face, body, material) + rooftop landing",
  "pieces": {
-  "render": {
-   "status": "built",
-   "round": 1,
-   "note": "Feature-complete: raymarched golden-hour clouds, height fog, 2-cascade shadows, 5 moods (inferno w/ cloud lightning + embers), AO, sun shafts, bloom, AgX grade, speed blur, GPU particles. White-out bug fixed. Perf pass: 9 M tris \u2192 target < 4 M."
-  },
-  "world": {
-   "status": "built",
-   "round": 1,
-   "note": "Feature-complete; create() now ~1.3\u20132.6 s (was 14\u201317 s): gate area + wall + physics first, rest of town/terrain/props stream in background slices."
-  },
-  "titans": {
-   "status": "built",
-   "round": 1,
-   "note": "Feature-complete: 57 s intro (16 shots: calm crane, lightning, grip, kick + breach, tracked boulder, dust wave, the bite, burning town), phase shots + kill cam, 160 fleeing civilians, 8 pure-titan body types."
-  },
   "cinematic": {
-   "status": "built",
-   "round": 1,
-   "note": "Feature-complete: ~70 m smiling titan (210k tris, 62-bone IK rig), 3 phases: wall-grip wrists \u2192 town rampage ankles \u2192 steam-fury nape; eats civilians; kill collapse."
+   "status": "building",
+   "round": 0,
+   "note": "Head + body sculpt (Colossal builder)"
+  },
+  "render": {
+   "status": "building",
+   "round": 0,
+   "note": "Muscle material specialist (red meat, fascia, fibres)"
   },
   "player": {
-   "status": "built",
-   "round": 1,
-   "note": "Feature-complete: skinned soldier + ODM gear + flapping cloak, rope-pendulum swinging, gas boost/reel, wall-kick, cling to the giant, spin slash w/ hit-stop, lock-on, grab escape, FOV speed kick."
-  },
-  "ui": {
-   "status": "built",
-   "round": 1,
-   "note": "Feature-complete: cinematic title over live town, boss bar, weak-point markers, gauges, radar, pause/death/victory, director flow title\u2192intro\u2192fight\u2192victory, resupply crates, fires + bells, ambient titans. Audio rebuilt: 53 procedural sounds, HRTF spatial, wall echo, giant giggle/bite/roar, dynamic score with BRAAM escalations; create() 29 ms."
+   "status": "building",
+   "round": 0,
+   "note": "First landing after intro \u2192 house rooftop"
   },
   "critic": {
-   "status": "queued",
-   "note": "Stopped by the user \u2014 user feedback first."
-  },
-  "game": {
-   "status": "built",
-   "note": "PLAY HERE (stable): http://127.0.0.1:4173 \u2014 refresh for the latest snapshot."
+   "status": "critic",
+   "note": "Fresh harsh critic, blind A/B vs anime + AoT game refs"
   }
  },
  "log": [
   {
-   "t": "16:40",
-   "m": "Read reference tweet and spiderbench repo, extracted 16 frames from gameplay video as the bar."
-  },
-  {
-   "t": "16:55",
-   "m": "Engine core, contracts, stubs, headless screenshot rig (SwiftShader) done. Baseline commit."
-  },
-  {
-   "t": "17:05",
-   "m": "Launched 6 parallel builders: render, world, titans, cinematic, player, audio/ui."
-  },
-  {
-   "t": "17:20",
-   "m": "~7k lines landed across 6 systems. Integrated build now shows the new sky/fog/post; world, titans, player still wiring in."
-  },
-  {
-   "t": "17:26",
-   "m": "User direction: one hero scene with a giant titan; hero look = Attack Titan (ref/attack_titan.png). Contract updated, all 6 builders redirected."
-  },
-  {
-   "t": "17:36",
-   "m": "User direction: enemy giant face = Smiling Titan (refs saved), eats normal humans. Giant, cinematics/civilians and UI builders redirected."
-  },
-  {
-   "t": "17:38",
-   "m": "~14k lines landed. First titan bodies (procedural SDF) and sky/fog renders exist; integrated build is mid-edit (sky module transiently failing), fixed at integration."
-  },
-  {
-   "t": "18:10",
-   "m": "Accelerated to 10 agents: + dedicated AUDIO builder, + INTEGRATOR/perf engineer, + 2 harsh blind-A/B critics. Screenshot queue added (max 3 browsers; 7 GB RAM)."
-  },
-  {
-   "t": "18:17",
-   "m": "~19k lines. First real frames: Smiling Titan face (center-parted hair, huge grin), Survey Corps soldier with ODM gear, half-timbered Shiganshina streets. Critic round 1 in progress. Machine overloaded (load avg 78) \u2014 all agents now use the queued screenshot tool only."
-  },
-  {
-   "t": "18:22",
-   "m": "User: implement first, test later. Critics paused; 8 builders told to go feature-complete in ~20 min, one error check each; integrator commits the first playable snapshot."
-  },
-  {
-   "t": "18:30",
-   "m": "WORLD builder feature-complete (rays ~25 \u00b5s). Sent back for load-time work. Render asked to fix washed-out street fog in the fight view."
-  },
-  {
-   "t": "18:34",
-   "m": "UI + DIRECTOR builder feature-complete. Audio load-blocking (~10 s) sent to the AUDIO builder; titlePose() requested from the giant builder."
-  },
-  {
-   "t": "18:39",
-   "m": "~20k lines. Integrator landed parallel loading, loading screen, bake cache for titan meshes, perf overlay (?perf=1). Waiting on giant, cinematics, player, render, audio to finish their implement-now pass."
-  },
-  {
-   "t": "18:45",
-   "m": "CINEMATICS + CIVILIANS + TITANS builder feature-complete. Follow-up: switch the bite beat to the public colossal.eat()."
-  },
-  {
-   "t": "18:58",
-   "m": "PLAYABLE: integrator committed 1fd7937 \u2014 whole flow title\u2192intro\u2192fight\u2192phases\u2192kill cam\u2192victory runs with 0 errors; load 89 s \u2192 17 s headless. Player + giant builders feature-complete."
-  },
-  {
-   "t": "19:05",
-   "m": "RENDER feature-complete; white-out fixed (explosion flashes stacking). Integrator now driving triangle count 9 M \u2192 < 4 M with world/titans/giant owners."
-  },
-  {
-   "t": "19:12",
-   "m": "WORLD load time 14\u201317 s \u2192 ~2 s (hero area first, rest streamed in time-sliced jobs, ~300 MB less garbage)."
-  },
-  {
-   "t": "19:20",
-   "m": "Integrator: load 3.5 s headless, \u2264 408 calls / 2.4 M tris (from 9 M). Stable preview server on :4190 so the user's fight isn't reloaded by builder saves."
-  },
-  {
-   "t": "19:25",
-   "m": "AUDIO feature-complete: 53 sounds, spatial mix, giant's wet giggle + bite, dynamic battle score; load cost 1.5 s \u2192 29 ms. All 7 builders now feature-complete."
-  },
-  {
-   "t": "19:30",
-   "m": "Gauntlet round 2 \u00b7 WORLD fixed critic's 'dead street' gap: directional paving with ruts, gutters, puddles, grime, contact shading, densely dressed avenue (stalls, carts, barrels, signs)."
-  },
-  {
-   "t": "19:33",
-   "m": "Gauntlet round 2 \u00b7 UI fixed 'HUD footprint too heavy': compact objective, gauges 40% smaller and fade when idle, smaller radar, no backing plates."
-  },
-  {
-   "t": "19:38",
-   "m": "Stable build live on :4190 (commit 2cb928b): fight view 266 calls / 1.6 M tris, ready ~3 s, 0 errors. Integrator hunting an 8.4 M-tri hotspot in the intro."
-  },
-  {
-   "t": "19:42",
-   "m": "Gauntlet round 2 \u00b7 RENDER fixed inferno sky: charcoal smoke banks with fire-lit edges, hot horizon, deep blacks, ember streaks; giant readable through thinner smoke. Resupply beacon (pale 90 m beam) routed to UI."
-  },
-  {
-   "t": "19:47",
-   "m": "UI: resupply beam replaced by a sputtering red-orange flare + ~8 m signal smoke; HUD marker only when gas/blades are low."
-  },
-  {
-   "t": "19:55",
-   "m": "Stable build moved to :4173 (4190 is on Chrome's unsafe-port list). 4bfef8b: intro 9.8 M \u2192 1.7 M tris, cloak 974 \u2192 63 ms, fx 1853 \u2192 842 ms per 600 frames, sky turns inferno at fight start, resolution capped at ~1080p pixel budget."
-  },
-  {
-   "t": "20:05",
-   "m": "Title screen: the Smiling Titan grips the long buttressed wall top behind the menu, shadow cast down the wall face; far weak-point markers collapse into one boss marker."
-  },
-  {
-   "t": "20:10",
-   "m": "Gauntlet round 3 \u00b7 RENDER: town dust confined to the lowest ~22 m, contrast floor within 300 m, steam scaled correctly (intro steam was an 80\u2013130 m fog wall), hot glow behind the breach. Giant and wall now read crisply."
-  },
-  {
-   "t": "20:14",
-   "m": "Gauntlet round 3 \u00b7 UI decluttered the reticle area (icon-only markers near the crosshair, fade over the player, outlined world text). WORLD fixed floating gatehouse merlons."
-  },
-  {
-   "t": "20:22",
-   "m": "Published ecca938 to :4173: title giant, inferno/fog r3, HUD declutter, resupply flare, dressed avenue, merlon fix. Full flow verified headless, 0 errors."
-  },
-  {
-   "t": "20:26",
-   "m": "Gauntlet round 4 \u00b7 RENDER: sculpted smoke banks (charcoal cores, fire-lit edges, steel-blue gaps, hot band behind the breach), dimmer blood-orange sun."
-  },
-  {
-   "t": "20:35",
-   "m": "User: accelerate. 1 slow critic \u2192 3 parallel critics (2 pieces each), screenshot slots 1 \u2192 3, integrator publishes to :4173 after every fix. Player, intro and world builders nudged onto their open gaps."
-  },
-  {
-   "t": "20:42",
-   "m": "FIRST BLIND WIN: the Smiling Titan beat enemy_face_front.png narrowly (1 of 2 consecutive wins needed). Builder already polishing eyes/crow's-feet/hair aliasing ahead of the harder bar (enemy_face_grin_town.png)."
-  },
-  {
-   "t": "20:30",
-   "m": "Force-published to :4173: giant steam/torso/eyes fixes, inferno smoke banks, soldier colour separation + rim light, intro reveal synced."
-  },
-  {
-   "t": "21:05",
-   "m": "User: stop all critics, feedback first. Critics stopped, builders hold after current fix, auto-publish paused; :4173 frozen on 331a67f."
-  },
-  {
-   "t": "21:18",
-   "m": "User feedback: no fire/burning in battle; epic blue sky with white cumulus turning into a pink-peach afternoon (refs saved); buildings must not be crushed. Render, world, giant, director and intro builders implementing; auto-publish resumes as fixes land."
+   "t": "now",
+   "m": "Gauntlet started: Colossal AAA + rooftop landing."
   }
  ]
 }

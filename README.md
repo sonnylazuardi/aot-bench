@@ -31,12 +31,12 @@ Everything is generated in code at load time: the town and wall, the titans (SDF
 - **Audio:** fully procedural WebAudio. Spatial sound effects and a dynamic choir, drums and brass score that escalates with each phase.
 
 ## Run it
-You need Node.js 20.19+ or 22.12+ and a WebGL2-capable browser. A discrete GPU is recommended.
+You need [Bun](https://bun.sh) 1.4.2+ (no Node.js required) and a WebGL2-capable browser. A discrete GPU is recommended.
 
 ```bash
-npm install
-npm run dev          # http://127.0.0.1:5190
-npm run build && npm run preview   # production build on http://127.0.0.1:4173
+bun install
+bun run dev          # http://127.0.0.1:5190
+bun run build && bun run preview   # production build on http://127.0.0.1:4173
 ```
 
 URL flags:

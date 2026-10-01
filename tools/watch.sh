@@ -5,7 +5,7 @@ LOG=${1:-/tmp/claude-1000/aot-watch.log}
 cd "$(dirname "$0")/.." || exit 1
 i=0
 while true; do
-  if [ $((i % 3)) -eq 2 ]; then out=$(node tools/health.mjs --full 2>&1); else out=$(node tools/health.mjs 2>&1); fi
+  if [ $((i % 3)) -eq 2 ]; then out=$(bun tools/health.mjs --full 2>&1); else out=$(bun tools/health.mjs 2>&1); fi
   rc=$?
   echo "$out" >> "$LOG"
   # health passed and builders left uncommitted work: snapshot-commit it (local only, never pushed)
@@ -20,7 +20,7 @@ Claude-Session: https://claude.ai/code/session_01UZKmJ5SUz5eyijfriKn4fN" >> "$LO
   pub=$(cat dist/SNAPSHOT.txt 2>/dev/null | head -1)
   if [ $rc -eq 0 ] && [ "$head" != "$pub" ]; then
     # only publish a commit whose tree matches what was just checked (working tree may be ahead; that's fine)
-    node tools/publish.mjs >> "$LOG" 2>&1 && echo "[watch $(date +%H:%M)] PUBLISHED $head: $(git log -1 --format=%s | cut -c1-160)" >> "$LOG"
+    bun tools/publish.mjs >> "$LOG" 2>&1 && echo "[watch $(date +%H:%M)] PUBLISHED $head: $(git log -1 --format=%s | cut -c1-160)" >> "$LOG"
   elif [ $rc -ne 0 ]; then
     echo "[watch $(date +%H:%M)] HEALTH FAILED — not publishing $head" >> "$LOG"
   fi

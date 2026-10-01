@@ -148,7 +148,7 @@ export function createBrain(ctx, G) {
       h.w = 0.85;
       h.target.set(ARM.wrist[0] * side * 0.85, ARM.wrist[1] + 0.06, 0.08 + ph * side * -0.12).add(pose.rootOff);
       h.f.set(side * 0.2, -1, 0.15); h.d.set(side, 0, -0.2);
-      h.curl = [0.5, 0.6, 0.4, 0]; h.thumb = 0.5;
+      h.curl = [1.45, 1.55, 1.05, 0]; h.thumb = 0.9;   // big clenched fists
     }
   }
 
@@ -732,6 +732,11 @@ export function createBrain(ctx, G) {
   const PLZ = ctx.LAYOUT.plaza;
   const onPlaza = (z) => PLZ && Math.abs(z - PLZ.z) < PLZ.radius * 0.7;
   const streetX = (z, x) => onPlaza(z) ? clamp(x, -PLZ.radius * 0.55, PLZ.radius * 0.55) : clamp(x, -3, 3);
+  function modeStand(dt, time) {   // calm standing pose (debug / photo): fists, feet planted, slow breathing
+    pose.rootOff.set(0, 0, 0); pose.twist = 0; pose.side = 0; pose.lean = S.lean = 0.08;
+    gait.vel.set(0, 0, 0); gait.speed = 0; gaitUpdate(dt, false); swingArms();
+    gazeUpdate(dt, time); pose.jaw = 0;
+  }
   function modeStride(dt, time) {
     pose.rootOff.set(0, 0, 0); pose.twist = 0; pose.side = 0;
     const pl = playerOK() ? player() : null;
@@ -879,6 +884,7 @@ export function createBrain(ctx, G) {
       case 'kneel': modeKneel(dt, time); break;
       case 'fury': modeFury(dt, time); break;
       case 'dying': modeDying(dt, time); break;
+      case 'stand': modeStand(dt, time); break;
     }
     if (S.mode !== 'fury') { S.steaming = !!S.blasting; S.hurt = Math.max(0, S.hurt - dt * 0.5); }
     if (!S.action || S.action.type !== 'blast') { S.blasting = false; if (S.mode !== 'fury') S.steamWarn = 0; }
@@ -946,6 +952,7 @@ export function createBrain(ctx, G) {
       if (S.mode === 'appear' || S.mode === 'kick') setMode('wall');
       setPhase(1);
     },
+    standDebug(x = 0, z = 150, yaw = Math.PI) { S.fighting = false; S.action = null; root.position.set(x, ground(x, z), z); root.rotation.y = yaw; gaitReset(); setMode('stand'); pose.gazeW = 1; },
     setPhaseDebug(p) {
       S.fighting = true; S.action = null;
       if (p === 1) { standAtWall(); setMode('wall'); setPhase(1); }

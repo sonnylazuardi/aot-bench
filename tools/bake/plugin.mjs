@@ -73,7 +73,7 @@ function pump(conc, nice) {
   while (running < conc && queue.length) {
     const job = queue.shift();
     running++;
-    const child = spawn(process.execPath, [WORKER, path.join(ROOT, BAKERS[job.system].entry), BAKERS[job.system].fn, JSON.stringify(job.args), job.file],
+    const child = spawn('bun', [WORKER, path.join(ROOT, BAKERS[job.system].entry), BAKERS[job.system].fn, JSON.stringify(job.args), job.file],
       { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
     if (nice) { try { os.setPriority(child.pid, 15); } catch {} }
     let out = '', err = '';

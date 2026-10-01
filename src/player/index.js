@@ -1097,6 +1097,7 @@ export async function create(ctx) {
   ctx.renderer.domElement.addEventListener('mousedown', () => {
     if (ctx.mode === 'play' && player.enabled && !input.locked) { input.requestLock(); try { ctx.audio?.unlock?.(); } catch (e) { /* */ } }
   });
+  ctx.events.on('intro:done', () => { ctx.shake(0, { calm: 4 }); ctx.cam?.snap?.(); });
   setBladeVisual();
   // initial placement
   {

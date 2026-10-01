@@ -350,7 +350,7 @@ export async function create(ctx) {
   }
   function updateDof(dt) {
     if (!dofPass) return;
-    const cine = ctx.cameraOwner === 'intro';
+    const cine = ctx.cameraOwner === 'intro' || api.warmup;
     dofState.k += ((cine ? 1 : 0) - dofState.k) * (1 - Math.exp(-dt * 4));
     const on = dofState.k > 0.02;
     if (dofPass.enabled !== on) dofPass.enabled = on;
@@ -365,7 +365,7 @@ export async function create(ctx) {
   }
 
   const api = {
-    composer, bloom, grade, ao, settings, dof,
+    composer, bloom, grade, ao, settings, dof, dofPass, warmup: false,
     /** cinematic focus: a world point or a distance in metres (holds ~1 s; call every frame to keep it) */
     setFocus(v) {
       if (v == null) { dofState.override = null; return; }

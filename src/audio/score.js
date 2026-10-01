@@ -1,19 +1,21 @@
-// Adaptive orchestral score: choir, low-string ostinati, taiko ensemble, brass, an original heroic theme.
+// Adaptive orchestral score — adventure / anime-battle hype: choir pads + "hey!/ha!" shouts, driving staccato strings,
+// taiko ensemble + a punchy kit (kick/snare/hats), bold brass, an original heroic theme.
 //
-//   Instruments are SAMPLED ONCE per page, lazily (the first Score = audio unlock starts it): every note family is
-//   rendered at a few anchor pitches on OfflineAudioContexts (native DSP on the render thread). Main-thread work per
-//   buffer = building a small graph + one normalise/loop-crossfade pass (~1–2 ms), with a yield between buffers.
-//   Families: choirF (female 'aah', 2×5 detuned singers → vowel formant bank, vibrato, breath), choirM (male 'oh'),
-//   strL / strH / trem (string sections, bowed attack, body resonances), spic (marcato/spiccato), horn (legato section),
-//   stab (trombones+tuba with growl), braam, taiko ×3, odaiko, gran cassa, shime, snare, crash, swell, impact.
+//   Instruments are SAMPLED ONCE per page, lazily (ensureBank(): at 'loaded' via index.js, or the first Score): every note
+//   family is rendered at a few anchor pitches on OfflineAudioContexts (native DSP on the render thread). Main-thread work
+//   per buffer = building a small graph + one level/loop-crossfade pass, with a yield between buffers.
+//   Families: choirF (female 'aah', 2×5 detuned singers → vowel formants, vibrato, breath), choirM (male 'oh'), hey/ha
+//   (shouts), strL / strH (string sections, bowed attack), spic (staccato), horn (legato section), stab (trombones+tuba
+//   with growl), braam, kick, snare, hat, taiko ×3, odaiko, gran cassa, shime, crash, swell, impact.
 //   Playback = buffer voices on the AudioContext clock; schedule(until) is a 16th-note lookahead scheduler.
 //
-//   Music: D minor (combat), E minor (phase 2), F minor (phase 3), D major (victory). Combat phrases are 16 bars:
-//   A = ostinato + taiko + pads, B = the heroic theme on horns (+choir/strings as the fight escalates).
-//   setState() lands on the next bar line (next beat if the bar is > 2.5 s away; breach/death are near-immediate),
-//   with a cymbal riser + taiko roll into escalations and a BRAAM/impact/crash on the landing.
-//   API (used by src/audio/index.js): new Score(ac, out, drums), setState(name, when?, {immediate}), schedule(until),
-//   stinger(streak), heroic(n), motif(when, major), braam(time, chord, vel), nextBarTime(), state, target, cfg, stepDur.
+//   Arc: title = soaring adventure theme (D major, I–bVII–IV lift, 112 bpm) · calm/dread = anticipation, pulsing strings
+//   and building drums (124/138 bpm) · breach = big heroic hit into a 150 bpm groove · combat 152 (Dm) → boss2 160 (Em)
+//   → boss3 168 (Fm): 16-bar phrases, A = ostinato + kit + shouts, B = the theme on horns (+choir/strings) · victory =
+//   major-key fanfare · death = two bars of breath, then a "get back up" groove. setState() lands on the next bar
+//   (next beat if the bar is > 2.5 s away; breach/death near-immediate) with riser + roll in, BRAAM/impact on landing.
+//   API (used by src/audio/index.js): new Score(ac, out, drums), Score.ready(), setState(name, when?, {immediate}),
+//   schedule(until), stinger(streak), heroic(n), motif(when, major), braam(time, chord, vel), nextBarTime(), state, cfg.
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 function mulberry32(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; };
@@ -72,7 +74,7 @@ function bChoir(k, midi, male) {
     k.chain(out, k.f('highpass', male ? 75 : 150, 0.7)).connect(merger, 0, side);
   }
 }
-// string sections: type 'low' (celli+basses sustain) | 'high' (violins) | 'trem' (violins tremolo, sul pont) | 'spic' (marcato)
+// string sections: type 'low' (celli+basses sustain) | 'high' (violins) | 'spic' (staccato)
 function bStrings(k, midi, type) {
   const { oc, r } = k, f0 = mtof(midi), spic = type === 'spic', low = type === 'low', n = spic ? 4 : low ? 6 : 8;
   const sum = k.g(1 / n);
@@ -80,9 +82,7 @@ function bStrings(k, midi, type) {
     const jit = spic ? r() * 0.008 : r() * 0.03, det = (r() - 0.5) * (spic ? 12 : 16);
     const o = k.o('sawtooth', f0, det, jit);
     if (!spic) { k.lfo(5 + r() * 1.3, 7 + r() * 9, o.detune, 0.25 + r() * 0.3, 'sine', jit); k.lfo(0.1 + r() * 0.2, 4, o.detune); }
-    const pg = k.g(type === 'trem' ? 0.5 : 1);
-    if (type === 'trem') k.lfo(11.5 + r() * 4, 0.5, pg.gain, 0, 'triangle', r() * 0.08);
-    o.connect(pg); pg.connect(sum);
+    o.connect(sum);
   }
   const bow = k.chain(k.noise(), k.f('bandpass', low ? 2200 : 3800, 0.8), k.g(0)); bow.connect(sum);
   const amp = k.g(0), lp = k.f('lowpass', 1000, 0.6);
@@ -189,6 +189,38 @@ function bSnare(k, m, v) {
   k.chain(k.noise(), k.f('highpass', 1700, 0.7), k.f('peaking', 5200, 1, 6), g, sum);
   k.chain(sum, k.f('highpass', 120, 0.7), oc.destination);
 }
+function bKick(k) {
+  const { oc } = k, sum = k.g(1);
+  membrane(k, sum, { f0: 170, f1: 58, f2: 50, glide: 0.03, tc: 0.13 });
+  membrane(k, sum, { f0: 260, f1: 110, glide: 0.02, tc: 0.04, gain: 0.4 });
+  burst(k, sum, { type: 'highpass', f: 2800, tc: 0.005, gain: 0.45 });
+  burst(k, sum, { f: 900, Q: 0.8, tc: 0.012, gain: 0.3 });
+  k.chain(sum, k.shaper(2.2), k.f('highpass', 38, 0.7), oc.destination);
+}
+function bHat(k, m, v) {
+  const { oc } = k, g = k.g(0); k.env(g.gain, [[0, 0], [0.001, 1], [0.003, 0, 'tc', v ? 0.13 : 0.022]]);
+  k.chain(k.noise(), k.f('highpass', 7000, 0.7), k.f('peaking', 10500, 1.2, 5), g, oc.destination);
+}
+// choir shout ('hey!' / 'ha!'): 4 men + 2 women an octave up, gritty, pitch falling, h-onset → vowel formants
+function bShout(k, midi, hey) {
+  const { oc, r } = k, f0 = mtof(midi), merger = oc.createChannelMerger(2); merger.connect(oc.destination);
+  for (let side = 0; side < 2; side++) {
+    const sum = k.g(0.2);
+    for (let i = 0; i < 6; i++) {
+      const fem = i >= 4, jit = r() * 0.03, det = (r() - 0.5) * 35;
+      const o = k.o('sawtooth', f0 * (fem ? 2 : 1), det, jit);
+      o.detune.setValueAtTime(det + 70, jit); o.detune.linearRampToValueAtTime(det - 130, jit + 0.4);
+      o.connect(sum);
+    }
+    const amp = k.g(0); k.env(amp.gain, [[0, 0], [0.035, 0], [0.05, 1], [0.09, 0.75, 'tc', 0.08], [0.24, 0, 'tc', 0.05]]);
+    const hh = k.g(0); k.env(hh.gain, [[0, 0], [0.004, 0.35], [0.045, 0]]); k.chain(k.noise(), k.f('bandpass', 1600, 0.5), hh);
+    const pre = k.chain(sum, k.shaper(1.8), amp); const out = k.g(1); hh.connect(out);
+    const F = hey ? [[540, 330, 5, 1], [1850, 2250, 7, 0.6], [2550, 2950, 8, 0.3]] : [[820, 760, 5, 1], [1250, 1200, 7, 0.55], [2750, 2700, 8, 0.25]];
+    for (const [a, b, Q, gg] of F) { const bp = k.f('bandpass', a, Q); k.env(bp.frequency, [[0.05, a], [0.25, b]]); k.chain(pre, bp, k.g(gg * 3), out); }
+    k.chain(pre, k.f('lowpass', 500, 0.7), k.g(0.2), out);
+    k.chain(out, k.f('highpass', 110, 0.7)).connect(merger, 0, side);
+  }
+}
 function bCrash(k) {
   const { oc, r } = k, merger = oc.createChannelMerger(2); merger.connect(oc.destination);
   for (let side = 0; side < 2; side++) {
@@ -234,6 +266,10 @@ const FAM = {
   swell: { variants: 1, dur: 4, ch: 2, sr: 44100, build: bSwell },
   impact: { variants: 1, dur: 4.5, ch: 2, build: bImpact },
   snare: { variants: 2, dur: 0.5, sr: 44100, build: bSnare },
+  kick: { variants: 1, dur: 0.6, build: bKick },
+  hat: { variants: 2, dur: 0.45, sr: 44100, build: bHat },
+  hey: { anchors: [46, 50, 54, 58], dur: 0.6, ch: 2, build: (k, m) => bShout(k, m, true) },
+  ha: { anchors: [46, 50, 54, 58], dur: 0.6, ch: 2, build: (k, m) => bShout(k, m, false) },
   choirF: { anchors: range(57, 81, 3), dur: 4.6, loop: [1.2, 4.4], ch: 2, build: (k, m) => bChoir(k, m, false) },
   choirM: { anchors: range(38, 62, 3), dur: 4.6, loop: [1.2, 4.4], ch: 2, build: (k, m) => bChoir(k, m, true) },
   strL: { anchors: range(26, 54, 4), dur: 4.6, loop: [1.2, 4.4], build: (k, m) => bStrings(k, m, 'low') },
@@ -242,7 +278,6 @@ const FAM = {
   stab: { anchors: range(31, 63, 4), dur: 1.0, build: bStab },
   braam: { anchors: range(26, 44, 3), dur: 3.6, ch: 2, build: bBraam },
   strH: { anchors: range(62, 90, 4), dur: 4.6, loop: [1.2, 4.4], build: (k, m) => bStrings(k, m, 'high') },
-  trem: { anchors: range(62, 86, 4), dur: 4.6, loop: [1.2, 4.4], build: (k, m) => bStrings(k, m, 'trem') },
 };
 const BANK = {}; // fam -> [{m, v, buf}]
 export const bankStats = { items: 0, done: 0, ms: 0, maxSyncMs: 0, ready: false, errors: 0 };
@@ -300,70 +335,83 @@ function pick(fam, midi, r) {
 
 // ================================================================ harmony + material
 const QUAL = { m: [0, 3, 7], M: [0, 4, 7], sus: [0, 5, 7], M7: [0, 4, 7, 11], m6: [0, 3, 7, 9], add9: [0, 4, 7, 14] };
-const P_MIN = [[0, 'm'], [8, 'M'], [10, 'M'], [7, 'M'], [0, 'm'], [8, 'M'], [5, 'm'], [7, 'M']];   // i VI VII V i VI iv V
-const P_MAJ = [[0, 'M'], [9, 'm'], [7, 'M'], [7, 'M'], [0, 'M'], [9, 'm'], [5, 'M'], [7, 'M']];   // I vi V V I vi IV V
-// the heroic theme (original): [semitones above the tonic, beats]; 8 bars over P_MIN
+const P_MIN = [[0, 'm'], [8, 'M'], [10, 'M'], [7, 'M'], [0, 'm'], [8, 'M'], [5, 'm'], [7, 'M']];   // i VI VII V i VI iv V (the theme's harmony)
+const P_MAJ = [[0, 'M'], [9, 'm'], [7, 'M'], [7, 'M'], [0, 'M'], [9, 'm'], [5, 'M'], [7, 'M']];   // I vi V V I vi IV V (theme in major)
+const P_MIXO = [[0, 'M'], [10, 'M'], [5, 'M'], [0, 'M']];                                          // I bVII IV I — the adventurous lift
+const P_HERO = [[0, 'm'], [0, 'm'], [8, 'M'], [8, 'M'], [3, 'M'], [3, 'M'], [10, 'M'], [10, 'M']]; // i VI III VII — rising, hopeful
+// the heroic theme (original): [semitones above the tonic, beats]; 8 bars over P_MIN (or P_MAJ when mapped to major)
 const THEME = [
   [[0, 1.5], [7, 0.5], [7, 1], [3, 1]], [[8, 1.5], [7, 0.5], [3, 1], [0, 1]], [[2, 1], [5, 0.5], [10, 0.5], [14, 1.5], [12, 0.5]], [[11, 2], [14, 1], [7, 1]],
   [[12, 1.5], [14, 0.5], [15, 1], [19, 1]], [[15, 1.5], [14, 0.5], [12, 1], [8, 1]], [[17, 1.5], [15, 0.5], [12, 1], [8, 1]], [[14, 1.5], [12, 0.5], [11, 2]],
 ];
 const TO_MAJ = { 3: 4, 8: 9, 10: 11, 15: 16, 20: 21, 22: 23 };
-// 16-step patterns [step, vel]
-const OST = [[0, 'R', 1], [1, 'R', 0.42], [2, 'R', 0.55], [3, '8', 0.9], [4, 'R', 0.42], [5, 'R', 0.55], [6, '5', 0.9], [7, 'R', 0.42],
-  [8, 'R', 0.95], [9, 'R', 0.42], [10, 'R', 0.55], [11, '8', 0.9], [12, 'R', 0.42], [13, '5', 0.6], [14, '3', 0.85], [15, '5', 0.55]];
+// string ostinati [step, note (R root · 8 octave · 5 fifth · 3 third), vel]
+const OSTS = {
+  gallop: [[0, 'R', 1], [1, 'R', 0.42], [2, 'R', 0.55], [3, '8', 0.9], [4, 'R', 0.42], [5, 'R', 0.55], [6, '5', 0.9], [7, 'R', 0.42],
+    [8, 'R', 0.95], [9, 'R', 0.42], [10, 'R', 0.55], [11, '8', 0.9], [12, 'R', 0.42], [13, '5', 0.6], [14, '3', 0.85], [15, '5', 0.55]],
+  pulse: [[0, 'R', 1], [2, 'R', 0.6], [4, '8', 0.85], [6, 'R', 0.6], [8, 'R', 0.95], [10, 'R', 0.6], [12, '8', 0.85], [14, '5', 0.7]],
+  drive: [[0, 'R', 1], [1, 'R', 0.5], [2, '8', 0.7], [3, 'R', 0.5], [4, '5', 0.85], [5, 'R', 0.5], [6, '8', 0.75], [7, 'R', 0.5],
+    [8, 'R', 0.95], [9, 'R', 0.5], [10, '8', 0.7], [11, 'R', 0.5], [12, '3', 0.85], [13, 'R', 0.5], [14, '5', 0.8], [15, '8', 0.6]],
+};
 const ARP = [0, 1, 2, 3, 2, 1, 2, 3, 4, 3, 2, 1, 2, 3, 2, 1];
 const ACC = new Set([0, 3, 6, 8, 11, 14]);
+const h16 = (a, b) => range(0, 15, 1).map((st) => [st, st % 4 === 2 ? a : b]); // 16th hats, offbeat 8ths accented
+// drum kits per state: [step, vel(, every n bars)]. kick/snare/hat = the kit; taiko/gran/odaiko/shime = the ensemble
 const DR = {
-  title: { taiko: [[0, 0.75], [10, 0.35]], gran: [[0, 0.55, 2]] },
-  dread: { taiko: [[0, 0.95], [3, 0.5]], odaiko: [[0, 0.8, 2]] },
-  breach: { taiko: [[0, 1], [3, 0.6], [6, 0.85], [8, 0.95], [11, 0.6], [14, 0.85]], shime: [[2, 0.3], [4, 0.45], [10, 0.3], [12, 0.45], [13, 0.3], [15, 0.55]], gran: [[0, 1]] },
-  combat: { taiko: [[0, 1], [3, 0.55], [6, 0.8], [8, 0.92], [11, 0.55], [14, 0.78]], shime: [[2, 0.25], [5, 0.2], [7, 0.3], [10, 0.25], [12, 0.35], [13, 0.25], [15, 0.45]], gran: [[0, 0.85, 2]] },
-  boss2: { taiko: [[0, 1], [2, 0.5], [3, 0.7], [6, 0.9], [8, 1], [10, 0.5], [11, 0.7], [14, 0.9]], shime: [[1, 0.2], [4, 0.45], [5, 0.25], [7, 0.3], [9, 0.2], [12, 0.45], [13, 0.3], [15, 0.5]], gran: [[0, 0.95]], odaiko: [[0, 0.7, 4]] },
-  boss3: { taiko: [[0, 1], [1, 0.5], [3, 0.8], [4, 0.55], [6, 1], [8, 1], [9, 0.5], [11, 0.8], [12, 0.55], [14, 1], [15, 0.6]], shime: range(0, 15, 1).map((s) => [s, s % 4 === 2 ? 0.5 : 0.22]), gran: [[0, 1], [8, 0.75]], odaiko: [[0, 0.85]] },
-  victory: { taiko: [[0, 1], [8, 0.85], [11, 0.5], [14, 0.6]], gran: [[0, 0.8]] },
+  title: { kick: [[0, 0.85], [8, 0.65], [10, 0.5]], snare: [[4, 0.55], [12, 0.65]], hat: [[2, 0.35], [6, 0.35], [10, 0.35], [14, 0.4]], taiko: [[0, 0.65], [14, 0.45]], gran: [[0, 0.5, 4]] },
+  calm: { kick: [[0, 0.75], [8, 0.65]], hat: [[2, 0.25], [6, 0.25], [10, 0.25], [14, 0.3]], taiko: [[0, 0.55], [8, 0.4]], shime: [[4, 0.2], [12, 0.25]] },
+  dread: { kick: [[0, 0.9], [4, 0.7], [8, 0.9], [12, 0.7]], hat: [[2, 0.35], [6, 0.35], [10, 0.35], [14, 0.4]], taiko: [[0, 0.95], [3, 0.5], [6, 0.7], [8, 0.9], [11, 0.5], [14, 0.7]], shime: [[2, 0.2], [5, 0.2], [10, 0.2], [13, 0.25]], gran: [[0, 0.6, 4]] },
+  breach: { kick: [[0, 1], [6, 0.8], [8, 0.95], [10, 0.6]], snare: [[4, 1], [12, 1], [15, 0.3]], hat: h16(0.5, 0.22), taiko: [[0, 1], [3, 0.6], [6, 0.85], [8, 0.95], [11, 0.6], [14, 0.85]], gran: [[0, 0.9]] },
+  combat: { kick: [[0, 1], [6, 0.8], [8, 0.95], [10, 0.6]], snare: [[4, 1], [12, 1], [15, 0.25]], hat: h16(0.45, 0.2), taiko: [[0, 1], [3, 0.55], [6, 0.8], [8, 0.92], [11, 0.55], [14, 0.78]], shime: [[7, 0.3], [13, 0.25]], gran: [[0, 0.75, 2]] },
+  boss2: { kick: [[0, 1], [3, 0.6], [6, 0.85], [8, 1], [10, 0.65], [14, 0.6]], snare: [[4, 1], [12, 1], [7, 0.2], [15, 0.3]], hat: h16(0.5, 0.25), taiko: [[0, 1], [2, 0.5], [3, 0.7], [6, 0.9], [8, 1], [10, 0.5], [11, 0.7], [14, 0.9]], gran: [[0, 0.85]], odaiko: [[0, 0.6, 4]] },
+  boss3: { kick: [[0, 1], [2, 0.6], [6, 0.85], [8, 1], [10, 0.7], [11, 0.6], [14, 0.8]], snare: [[4, 1], [12, 1], [7, 0.25], [13, 0.2], [15, 0.4]], hat: h16(0.55, 0.28), taiko: [[0, 1], [1, 0.5], [3, 0.8], [4, 0.55], [6, 1], [8, 1], [9, 0.5], [11, 0.8], [12, 0.55], [14, 1], [15, 0.6]], gran: [[0, 0.95], [8, 0.6]], odaiko: [[0, 0.7, 2]] },
+  victory: { kick: [[0, 1], [8, 0.85]], snare: [[4, 0.8], [12, 0.9], [14, 0.35], [15, 0.5]], hat: [[2, 0.35], [6, 0.35], [10, 0.35], [14, 0.4]], taiko: [[0, 1], [8, 0.85], [11, 0.5], [14, 0.6]], gran: [[0, 0.8, 2]] },
+  death: { kick: [[0, 0.85], [4, 0.6], [8, 0.85], [12, 0.6]], hat: [[2, 0.3], [6, 0.3], [10, 0.3], [14, 0.35]], taiko: [[0, 0.8], [6, 0.5], [8, 0.7], [14, 0.6]] },
 };
-const SNARE = {
-  back: [[4, 0.7], [7, 0.12], [12, 0.8], [15, 0.18]],
-  drive: [[0, 0.3], [2, 0.2], [4, 0.85], [6, 0.25], [7, 0.2], [10, 0.25], [12, 0.9], [13, 0.2], [14, 0.35], [15, 0.45]],
-};
+const SNARE = { drive: [[0, 0.3], [2, 0.2], [6, 0.25], [7, 0.2], [10, 0.25], [13, 0.2], [14, 0.35]] };
 const STAB = { sparse: [[0, 1]], mid: [[0, 1], [6, 0.75]], full: [[0, 1], [3, 0.6], [6, 0.85], [8, 0.9], [11, 0.6], [14, 0.8]] };
-const CHANT = [[0, 1, 3], [6, 0.75, 2], [8, 0.9, 5]];
+// choir shouts [step, 'hey'|'ha', vel, every n bars]
+const SHOUT = { two: [[12, 'hey', 0.9, 2]], one: [[12, 'hey', 1, 1]], hype: [[0, 'ha', 0.75, 2], [12, 'hey', 1, 1]] };
 
-// section levels (0..1). A = first 8 bars of a 16-bar phrase, B = last 8 (or the whole phrase when phrase <= 8)
-// cF/cM choir · sL low strings · sH high strings · tr tremolo · hp horn pad · sp ostinato · arp hi-string 16ths
-// theme: instrument set · tv theme level · st stab pattern · sn snare · ch chant · br braam on bar 1 of 4 · tone choir LP · att pad attack
+// sections (levels 0..1). I = optional intro (introBars), then A = first 8 bars of a 16-bar phrase, B = last 8.
+// cF/cM choir pads · sL low strings · sH high strings · hp horn pad · sp ostinato (+ost pattern) · arp hi-string 16ths
+// theme instruments + tv level · st brass stabs · sn extra snare · sh shouts · br braam every 4 bars · dk drum level · prog override
+// tone = female-choir brightness · att = pad attack
 export const STATES = {
-  title: { bpm: 72, key: 0, prog: P_MIN, phrase: 16, drums: 'title', rel: 1.6,
-    A: { cF: 0.3, cM: 0.45, sL: 0.55, sH: 0.15, tone: 1500, att: 1.2 },
-    B: { cF: 0.5, cM: 0.5, sL: 0.6, sH: 0.3, theme: ['horn'], tv: 0.75, tone: 2600, att: 0.8 } },
-  calm: { bpm: 72, key: 0, prog: [[0, 'm'], [0, 'm'], [8, 'M'], [8, 'M'], [3, 'M'], [3, 'M'], [10, 'M'], [10, 'M']], phrase: 16, rel: 1.8,
-    A: { cF: 0.28, cM: 0.2, sL: 0.45, sH: 0.2, tone: 1200, att: 1.5 },
-    B: { cF: 0.32, cM: 0.25, sL: 0.5, sH: 0.28, hp: 0.15, tone: 1400, att: 1.5 } },
-  dread: { bpm: 66, key: 0, prog: [[0, 'm'], [0, 'm'], [1, 'M'], [1, 'M'], [0, 'm'], [0, 'm'], [7, 'M'], [7, 'M']], phrase: 16, drums: 'dread', rel: 1.2, riser: 4,
-    A: { cM: 0.75, sL: 0.75, tr: 0.3, br: 0.55, tone: 1000, att: 0.6 },
-    B: { cM: 0.85, cF: 0.35, sL: 0.85, tr: 0.45, br: 0.7, tone: 1500, att: 0.5 } },
-  breach: { bpm: 128, key: 0, prog: [[0, 'm'], [8, 'M'], [10, 'M'], [7, 'M']], phrase: 4, drums: 'breach', rel: 0.35, crash: true,
-    A: { cF: 0.9, cM: 0.9, sL: 0.9, tr: 0.35, sp: 1, st: 'full', sn: 'drive', tone: 6000, att: 0.06 } },
-  combat: { bpm: 128, key: 0, prog: P_MIN, phrase: 16, drums: 'combat', rel: 0.3, riser: 8, crash: true,
-    A: { cF: 0.3, cM: 0.55, sL: 0.75, sp: 0.8, hp: 0.25, st: 'sparse', dk: 0.7, tone: 1800, att: 0.15 },
-    B: { cF: 0.75, cM: 0.75, sL: 0.9, sp: 0.9, tr: 0.25, st: 'mid', sn: 'back', theme: ['horn'], tv: 1, tone: 6000, att: 0.08 } },
-  boss2: { bpm: 134, key: 2, prog: P_MIN, phrase: 16, drums: 'boss2', rel: 0.3, riser: 8, crash: true,
-    A: { cF: 0.5, cM: 0.7, sL: 0.85, sp: 0.9, arp: 0.5, st: 'mid', sn: 'back', ch: 0.6, hp: 0.3, dk: 0.8, tone: 3500, att: 0.08 },
-    B: { cF: 0.8, cM: 0.85, sL: 0.95, sp: 0.95, tr: 0.35, st: 'full', sn: 'drive', theme: ['horn', 'choirF'], tv: 1, tone: 8000, att: 0.06 } },
-  boss3: { bpm: 140, key: 3, prog: P_MIN, phrase: 16, drums: 'boss3', rel: 0.25, riser: 8, crash: true,
-    A: { cF: 0.65, cM: 0.8, sL: 1, sp: 1, arp: 0.6, tr: 0.3, st: 'mid', sn: 'back', ch: 0.7, theme: ['horn', 'strH'], tv: 0.9, br: 0.6, dk: 0.88, tone: 5000, att: 0.06 },
-    B: { cF: 0.85, cM: 0.9, sL: 1, sp: 1, arp: 0.45, tr: 0.45, st: 'full', sn: 'drive', theme: ['horn', 'choirF', 'strH'], tv: 1, br: 0.75, tone: 9000, att: 0.05 } },
-  death: { bpm: 60, key: 0, prog: [[0, 'm'], [0, 'm'], [8, 'M7'], [8, 'M7'], [5, 'm6'], [5, 'm6'], [7, 'sus'], [7, 'M']], phrase: 8, rel: 2,
-    A: { cF: 0.3, sL: 0.4, sH: 0.15, tone: 900, att: 2 } },
-  victory: { bpm: 84, key: 0, major: true, prog: P_MAJ, phrase: 16, drums: 'victory', rel: 0.8, crash: true,
-    A: { cF: 0.9, cM: 0.75, sL: 0.85, sH: 0.35, theme: ['horn', 'choirF'], tv: 1, tone: 7000, att: 0.1 },
-    B: { cF: 0.45, cM: 0.4, sL: 0.55, sH: 0.45, theme: ['strH'], tv: 0.55, tone: 2500, att: 0.8 } },
+  title: { bpm: 112, key: 0, major: true, prog: P_MAJ, phrase: 16, drums: 'title', rel: 0.45, riser: 8, crash: true,
+    A: { prog: P_MIXO, cF: 0.4, cM: 0.45, sL: 0.6, sp: 0.7, ost: 'pulse', hp: 0.3, dk: 0.7, tone: 3000, att: 0.2 },
+    B: { cF: 0.6, cM: 0.5, sL: 0.7, sH: 0.35, sp: 0.75, ost: 'pulse', theme: ['horn', 'strH'], tv: 0.9, dk: 0.9, sh: 'two', tone: 5500, att: 0.1 } },
+  calm: { bpm: 124, key: 0, prog: P_HERO, phrase: 16, drums: 'calm', rel: 0.5, riser: 8,
+    A: { cF: 0.3, sL: 0.5, sH: 0.3, sp: 0.6, ost: 'pulse', dk: 0.6, tone: 2500, att: 0.3 },
+    B: { cF: 0.4, cM: 0.4, sL: 0.6, sH: 0.35, sp: 0.75, ost: 'gallop', hp: 0.3, dk: 0.85, tone: 3500, att: 0.2 } },
+  dread: { bpm: 138, key: 0, prog: [[0, 'm'], [8, 'M'], [10, 'M'], [10, 'M'], [0, 'm'], [8, 'M'], [7, 'sus'], [7, 'M']], phrase: 16, drums: 'dread', rel: 0.35, riser: 4,
+    A: { cF: 0.45, cM: 0.6, sL: 0.7, sp: 0.85, hp: 0.35, st: 'sparse', dk: 0.8, tone: 3000, att: 0.1 },
+    B: { cF: 0.6, cM: 0.75, sL: 0.8, sH: 0.35, sp: 0.9, arp: 0.4, st: 'mid', sh: 'two', dk: 1, tone: 5000, att: 0.08 } },
+  breach: { bpm: 150, key: 0, prog: [[0, 'm'], [8, 'M'], [10, 'M'], [7, 'M']], phrase: 4, drums: 'breach', rel: 0.3, crash: true,
+    A: { cF: 0.85, cM: 0.85, sL: 0.9, sp: 1, arp: 0.4, st: 'full', sh: 'one', tone: 7000, att: 0.05 } },
+  combat: { bpm: 152, key: 0, prog: P_MIN, phrase: 16, drums: 'combat', rel: 0.25, riser: 8, crash: true,
+    A: { cF: 0.45, cM: 0.6, sL: 0.8, sp: 0.9, st: 'mid', sh: 'two', hp: 0.3, dk: 0.85, tone: 3500, att: 0.08 },
+    B: { cF: 0.75, cM: 0.75, sL: 0.9, sp: 0.95, arp: 0.35, st: 'mid', sh: 'one', theme: ['horn'], tv: 1, tone: 7000, att: 0.05 } },
+  boss2: { bpm: 160, key: 2, prog: P_MIN, phrase: 16, drums: 'boss2', rel: 0.25, riser: 8, crash: true,
+    A: { cF: 0.55, cM: 0.7, sL: 0.9, sp: 1, arp: 0.5, st: 'full', sh: 'one', theme: ['strH'], tv: 0.8, hp: 0.3, dk: 0.9, tone: 5000, att: 0.05 },
+    B: { cF: 0.8, cM: 0.85, sL: 0.95, sp: 1, ost: 'drive', arp: 0.4, st: 'full', sn: 'drive', sh: 'hype', theme: ['horn', 'choirF'], tv: 1, tone: 8000, att: 0.05 } },
+  boss3: { bpm: 168, key: 3, prog: P_MIN, phrase: 16, drums: 'boss3', rel: 0.2, riser: 8, crash: true,
+    A: { cF: 0.7, cM: 0.8, sL: 1, sp: 1, ost: 'drive', arp: 0.55, st: 'full', sh: 'hype', theme: ['horn', 'strH'], tv: 0.95, br: 0.5, dk: 0.95, tone: 6000, att: 0.05 },
+    B: { cF: 0.85, cM: 0.9, sL: 1, sp: 1, ost: 'drive', arp: 0.45, st: 'full', sn: 'drive', sh: 'hype', theme: ['horn', 'choirF', 'strH'], tv: 1, br: 0.6, tone: 9000, att: 0.04 } },
+  // death: two bars of breath, then straight into a rising "get back up" groove
+  death: { bpm: 140, key: 0, prog: P_HERO, phrase: 16, drums: 'death', rel: 0.4, riser: 8, introBars: 2,
+    I: { prog: [[0, 'm'], [8, 'M']], cF: 0.3, sL: 0.4, sH: 0.2, nod: true, tone: 1800, att: 0.4 },
+    A: { cF: 0.35, cM: 0.4, sL: 0.55, sp: 0.7, ost: 'pulse', dk: 0.65, tone: 2500, att: 0.15 },
+    B: { cF: 0.5, cM: 0.55, sL: 0.7, sH: 0.3, sp: 0.85, hp: 0.35, st: 'sparse', sh: 'two', dk: 0.9, tone: 4000, att: 0.08 } },
+  victory: { bpm: 120, key: 0, major: true, prog: P_MAJ, phrase: 16, drums: 'victory', rel: 0.6, crash: true,
+    A: { cF: 0.9, cM: 0.75, sL: 0.85, sH: 0.4, sp: 0.6, ost: 'pulse', theme: ['horn', 'choirF', 'strH'], tv: 1, tone: 8000, att: 0.08 },
+    B: { cF: 0.6, cM: 0.5, sL: 0.65, sH: 0.5, sp: 0.55, ost: 'pulse', theme: ['horn', 'strH'], tv: 0.8, sh: 'two', dk: 0.8, tone: 5000, att: 0.2 } },
 };
 const RANK = { death: -1, calm: 0, title: 1, victory: 2, dread: 3, breach: 4, combat: 5, boss2: 6, boss3: 7 };
 // family playback trims (after bank normalisation: sustains at equal RMS, one-shots at equal peak)
-const TRIM = { choirF: 1.0, choirM: 0.9, strL: 0.8, strH: 0.6, trem: 0.5, spic: 0.85, horn: 1.2, stab: 1.0, braam: 0.6,
-  taiko: 0.6, gran: 0.6, odaiko: 0.7, shime: 0.35, snare: 0.32, crash: 0.38, swell: 0.4, impact: 1.1 };
-const OUT_GAIN = 2.6; // into the mixer's music fader (g.music 0.12): music-only ≈ −22..−19 LUFS in combat/boss, peaks ≈ −9 dBFS
+const TRIM = { choirF: 1.0, choirM: 0.9, strL: 0.8, strH: 0.6, spic: 0.85, horn: 1.2, stab: 1.0, braam: 0.6, hey: 0.75, ha: 0.7,
+  taiko: 0.6, gran: 0.6, odaiko: 0.7, shime: 0.35, snare: 0.4, kick: 0.7, hat: 0.2, crash: 0.38, swell: 0.4, impact: 1.1 };
+const OUT_GAIN = 2.1; // into the mixer's music fader (g.music 0.16): music-only ≈ −21..−20 LUFS in combat/boss, peaks ≈ −10 dBFS
 
 export class Score {
   static ready() { return ensureBank(); } // await before building a Score on an OfflineAudioContext (renders need the bank)
@@ -394,7 +442,7 @@ export class Score {
       tail.connect(this.master); const s = g(send); tail.connect(s); s.connect(this.hallIn);
       this.bus[k] = head;
     }
-    this.bus.trem = this.bus.strH; this.bus.braam = this.bus.stab;
+    this.bus.braam = this.bus.stab;
     this.held = []; this.themeQ = null;
     this.step = 0; this.bar = 0; this.nextTime = 0; this.cfg = STATES.title; this.sec = this.cfg.A; this.chord = null; this.fv = null;
     this.intensity = 0;
@@ -439,13 +487,13 @@ export class Score {
   }
   _apply(name, t) {
     const prev = this.state, cfg = STATES[name];
-    this.state = name; this.cfg = cfg; this.bar = 0; this.step = 0; this.nextTime = t;
+    this.state = name; this.cfg = cfg; this.sec = cfg.I || cfg.A; this.bar = 0; this.step = 0; this.nextTime = t;
     const up = (RANK[name] ?? 0) > (RANK[prev] ?? -2);
     this._cut(t, name === 'death' ? 0.5 : up ? 0.12 : 0.9);
     this.chord = null;
     this.intensity = Math.max(0, (RANK[name] ?? 0) - 3) / 4;
     if (prev && ((up && RANK[name] >= RANK.breach) || name === 'victory')) this._land(t, name === 'breach' || name === 'boss3' || name === 'victory' ? 1 : 0.85);
-    if (name === 'death') { this._hit('gran', t, 0.9); this._hit('odaiko', t + 0.01, 0.7); }
+    if (name === 'death') this._hit('gran', t, 0.6);
   }
   _land(t, k) {
     this._hit('impact', t, k, 'fx'); this._hit('crash', t, 0.9 * k, 'fx'); this._hit('gran', t, k); this._hit('odaiko', t, 0.8 * k);
@@ -504,10 +552,10 @@ export class Score {
 
   // ---------------------------------------------------------------- harmony
   _tonic() { return (2 + this.cfg.key) % 12; }
-  _chordInfo(ci) {
-    const [deg, q] = this.cfg.prog[((ci % this.cfg.prog.length) + this.cfg.prog.length) % this.cfg.prog.length];
+  _chordInfo(ci, P = this.sec?.prog || this.cfg.prog) {
+    const [deg, q] = P[((ci % P.length) + P.length) % P.length];
     const root = (this._tonic() + deg) % 12, iv = QUAL[q] || QUAL.m;
-    return { root, iv, pcs: iv.map((x) => (root + x) % 12), third: iv[1], r: up(root, 26) };
+    return { root, q, iv, pcs: iv.map((x) => (root + x) % 12), third: iv[1], r: up(root, 26) };
   }
   // closest 4-note female voicing (60..78) covering the triad, nearest to the previous one
   _voiceF(c) {
@@ -539,68 +587,68 @@ export class Score {
     }
   }
   _tick(t, s) {
-    const cfg = this.cfg, sd = this.stepDur, bar = this.bar, ph = cfg.phrase, pb = bar % ph, half = ph >= 16 ? 8 : ph;
-    const sec = this.sec = ph >= 16 && pb >= 8 && cfg.B ? cfg.B : cfg.A;
-    const c = this._chordInfo(bar);
-    const kD = DR[cfg.drums], dk = sec.dk ?? 1;
+    const cfg = this.cfg, sd = this.stepDur, ib = cfg.introBars || 0, intro = this.bar < ib, bar = intro ? this.bar : this.bar - ib;
+    const ph = cfg.phrase, pb = bar % ph, half = ph >= 16 ? 8 : ph;
+    const sec = this.sec = intro ? cfg.I : ph >= 16 && pb >= 8 && cfg.B ? cfg.B : cfg.A;
+    const P = sec.prog || cfg.prog, c = this._chordInfo(bar, P);
+    const kD = sec.nod ? null : DR[cfg.drums], dk = sec.dk ?? 1;
     if (s === 0) {
-      const secStart = pb % half === 0;
+      const secStart = intro ? bar === 0 : pb % half === 0;
       if (secStart) this.tone.frequency.setTargetAtTime(sec.tone || 3000, t, 0.4);
       // pads: new chord (or new section) → hold until the chord changes
-      const [d0, q0] = cfg.prog[bar % cfg.prog.length], [dp, qp] = cfg.prog[(bar - 1 + cfg.prog.length) % cfg.prog.length];
       if (this.padMiss && bankStats.done > 0) { this._cut(t, 0.4); this.chord = null; } // bank was still rendering: (re)enter the pads now
-      if (secStart || !this.chord || d0 !== dp || q0 !== qp) {
+      if (secStart || !this.chord || this.chord.root !== c.root || this.chord.q !== c.q) {
         this.padMiss = !bankStats.ready;
-        let nb = 1; while (nb < half - (pb % half) && cfg.prog[(bar + nb) % cfg.prog.length][0] === d0 && cfg.prog[(bar + nb) % cfg.prog.length][1] === q0) nb++;
+        const left = intro ? ib - bar : half - (pb % half);
+        let nb = 1; while (nb < left && P[(bar + nb) % P.length][0] === P[bar % P.length][0] && P[(bar + nb) % P.length][1] === P[bar % P.length][1]) nb++;
         this._pads(t, c, nb * 16 * sd, sec, cfg);
       }
       this.chord = c;
-      if (cfg.crash && pb % half === 0 && (pb > 0 || bar > 0) && (sec.theme || cfg.phrase <= 4)) this._hit('crash', t, 0.65, 'fx');
+      if (!intro && cfg.crash && pb % half === 0 && this.bar > 0 && (sec.theme || cfg.phrase <= 4)) this._hit('crash', t, 0.65, 'fx');
       if (sec.br && pb % 4 === 0) this.braam(t, c, sec.br);
       this.themeQ = null;
       if (sec.theme) this._theme(t, pb % half, sec, cfg);
-      if (cfg.riser && pb % cfg.riser === cfg.riser - 1 && !this.queued) this._riser(t + 16 * sd, 0.55 + 0.4 * this.intensity);
+      if (!intro && cfg.riser && pb % cfg.riser === cfg.riser - 1 && !this.queued) this._riser(t + 16 * sd, 0.55 + 0.4 * this.intensity);
+      if (intro && bar === ib - 1) this._riser(t + 16 * sd, 0.6);
     }
     if (this.themeQ) for (const n of this.themeQ.notes) if (n.st === s) this.themeQ.play(n);
-    const hum = () => t + (this.r() - 0.5) * 0.006;
+    const hum = () => t + (this.r() - 0.5) * 0.006, light = dk < 0.9;
     if (kD) {
-      for (const [st, v] of kD.taiko || []) if (st === s && (dk >= 0.9 || v > 0.7)) this._taiko(hum(), dk * v * (0.9 + this.r() * 0.15));
-      for (const [st, v, ev = 1] of kD.gran || []) if (st === s && bar % (dk < 0.9 ? ev * 2 : ev) === 0) this._hit('gran', t, dk * v);
+      for (const [st, v] of kD.kick || []) if (st === s && (!light || v > 0.7)) this._hit('kick', t, dk * v);
+      for (const [st, v] of kD.snare || []) if (st === s && (!light || v > 0.5)) this._hit('snare', hum(), dk * v);
+      for (const [st, v] of kD.hat || []) if (st === s && (!light || v > 0.3)) this._hit('hat', hum(), dk * v * (0.8 + this.r() * 0.4));
+      for (const [st, v] of kD.taiko || []) if (st === s && (!light || v > 0.7)) this._taiko(hum(), dk * v * (0.9 + this.r() * 0.15));
+      for (const [st, v, ev = 1] of kD.gran || []) if (st === s && bar % (light ? ev * 2 : ev) === 0) this._hit('gran', t, dk * v);
       for (const [st, v, ev = 1] of kD.odaiko || []) if (st === s && bar % ev === 0) this._hit('odaiko', t, v);
       for (const [st, v] of kD.shime || []) if (st === s) this._hit('shime', hum(), dk * v * (0.85 + this.r() * 0.3));
     }
-    if (sec.sn) for (const [st, v] of SNARE[sec.sn]) if (st === s) this._hit('snare', hum(), v);
-    // phrase-end fill: shime + snare crescendo into the next section
-    if (kD && cfg.riser && pb % 8 === 7 && s >= 8) { const k = (s - 7) / 8; this._hit('shime', t, 0.3 + 0.6 * k); if (s >= 12 && s % 2 === 0) this._taiko(t, 0.6 + 0.4 * k); }
-    // taiko roll into a queued escalation over the last beat
-    if (this.queued?.up) { const left = this.queued.at - t; if (left > 0 && left <= 4 * sd + 1e-3) { const k = 1 - left / (4 * sd); this._hit('shime', t, 0.45 + 0.5 * k); if (s % 2 === 0) this._taiko(t, 0.55 + 0.4 * k); } }
-    // low-string ostinato (celli) + basses on the accents
+    if (kD && sec.sn) for (const [st, v] of SNARE[sec.sn]) if (st === s) this._hit('snare', hum(), v);
+    // phrase-end fill: snare + shime 16ths crescendo, taiko on the 8ths, into the next section
+    if (kD && !intro && cfg.riser && pb % 8 === 7 && s >= 8) { const k = (s - 7) / 8; this._hit('snare', t, 0.25 + 0.6 * k); this._hit('shime', t, 0.3 + 0.5 * k); if (s >= 12 && s % 2 === 0) this._taiko(t, 0.6 + 0.4 * k); }
+    // taiko + snare roll into a queued escalation over the last beat
+    if (this.queued?.up) { const left = this.queued.at - t; if (left > 0 && left <= 4 * sd + 1e-3) { const k = 1 - left / (4 * sd); this._hit('snare', t, 0.4 + 0.5 * k); if (s % 2 === 0) this._taiko(t, 0.55 + 0.4 * k); } }
+    // driving staccato low strings (celli) + basses on the accents
     if (sec.sp) {
-      const [, kind, v] = OST[s], R = up(c.root, 38), m = kind === 'R' ? R : kind === '8' ? R + 12 : kind === '5' ? R + 7 : R + c.third;
-      this._note('spic', m, t, sd * 1.6, v * sec.sp, { release: 0.08 });
-      if (v > 0.8) this._note('spic', R - 12, t, sd * 2.2, v * sec.sp * 0.7, { release: 0.1 });
+      const o = OSTS[sec.ost || 'gallop'];
+      for (const [st, kind, v] of o) if (st === s) {
+        const R = up(c.root, 38), m = kind === 'R' ? R : kind === '8' ? R + 12 : kind === '5' ? R + 7 : R + c.third;
+        this._note('spic', m, t, sd * 1.6, v * sec.sp, { release: 0.08 });
+        if (v > 0.8) this._note('spic', R - 12, t, sd * 2.2, v * sec.sp * 0.7, { release: 0.1 });
+      }
     }
     if (sec.arp) {
       const R = up(c.root, 69), tones = [R, R + c.third, R + c.iv[2], R + 12, R + 12 + c.third];
       this._note('spic', tones[ARP[s]], t, sd * 1.2, sec.arp * (ACC.has(s) ? 1 : 0.6), { release: 0.06, dest: this.bus.strH });
     }
     if (sec.st) for (const [st, v] of STAB[sec.st]) if (st === s && (sec.st !== 'sparse' || bar % 2 === 0)) this._stab(t, c, v * (0.75 + 0.25 * this.intensity), sd);
-    if (sec.ch) for (const [st, v, d] of CHANT) if (st === s && bar % 2 === 0) {
-      const fv = this.fv || this._voiceF(c);
-      for (const m of fv.slice(1)) this._note('choirF', m, t, d * sd, sec.ch * v * 0.45, { release: 0.12 });
-      this._note('choirM', up(c.root, 45), t, d * sd, sec.ch * v * 0.6, { release: 0.12 });
-    }
+    if (sec.sh) for (const [st, w, v, ev] of SHOUT[sec.sh]) if (st === s && bar % ev === ev - 1) this._note(w, up(c.root, 47), t, 99, v, { dest: this.bus.choirM });
   }
   _pads(t, c, dur, sec, cfg) {
     const a = sec.att ?? 0.1, rel = cfg.rel ?? 0.4, o = { attack: a, release: rel, hold: true }, D = dur + 0.04;
     if (sec.cF) { const v = this._voiceF(c); v.forEach((m, i) => this._note('choirF', m, t, D, sec.cF * (i === 3 ? 0.55 : 0.48), o)); }
     if (sec.cM) { const R = up(c.root, 43); this._note('choirM', R, t, D, sec.cM * 0.6, o); this._note('choirM', R + 7, t, D, sec.cM * 0.5, o); this._note('choirM', R + 12, t, D, sec.cM * 0.42, o); }
     if (sec.sL) { const R = up(c.root, 28); this._note('strL', R, t, D, sec.sL * 0.7, o); this._note('strL', R + 12, t, D, sec.sL * 0.6, o); this._note('strL', up(c.pcs[2], R + 12), t, D, sec.sL * 0.4, o); }
-    if (sec.sH || sec.tr) {
-      const v = this.fv || this._voiceF(c), hi = [v[2] + 12, v[3] + 12];
-      if (sec.sH) hi.forEach((m) => this._note('strH', m, t, D, sec.sH * 0.6, { ...o, attack: Math.max(a, 0.25) }));
-      if (sec.tr) hi.forEach((m) => this._note('trem', m, t, D, sec.tr * 0.6, o));
-    }
+    if (sec.sH) { const v = this.fv || this._voiceF(c); [v[2] + 12, v[3] + 12].forEach((m) => this._note('strH', m, t, D, sec.sH * 0.6, { ...o, attack: Math.max(a, 0.2) })); }
     if (sec.hp) { this._note('horn', up(c.pcs[1], 53), t, D, sec.hp * 0.6, { ...o, attack: Math.max(a, 0.3) }); this._note('horn', up(c.pcs[2], 55), t, D, sec.hp * 0.5, { ...o, attack: Math.max(a, 0.3) }); }
   }
   _stab(t, c, v, sd) {
@@ -663,7 +711,8 @@ export class Score {
     this._note('stab', T - 12, last, ld, 0.9, { release: 0.3 }); this._note('stab', T - 5, last, ld, 0.7, { release: 0.3 });
     this._note('choirF', T + 12, last, ld, 0.5, { attack: 0.05, release: 0.6 }); this._note('choirF', T + 19, last, ld, 0.4, { attack: 0.05, release: 0.6 });
     this._note('choirM', T, last, ld, 0.6, { attack: 0.05, release: 0.6 });
-    this._taiko(t, 1); this._hit('gran', last, 0.8); this._hit('crash', last, 0.55, 'fx'); void c;
+    this._taiko(t, 1); this._hit('kick', t, 1); this._hit('gran', last, 0.8); this._hit('kick', last, 1); this._hit('crash', last, 0.6, 'fx'); this._hit('impact', last, 0.45, 'fx');
+    this._note('hey', up(c.root, 47), last, 99, 1, { dest: this.bus.choirM });
   }
   // the theme head (4 bars) on horns
   motif(when = this.ac.currentTime + 0.05, major = false) {

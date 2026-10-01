@@ -12,12 +12,12 @@ import { Score, ensureBank } from './score.js';
 
 // render order: what the first seconds need first; long cinematic beds last
 const ORDER = ['ui_tick', 'ui_confirm', 'taiko', 'taiko_hi', 'rim', 'gran', 'odaiko', 'swell', 'impact', 'wind',
-  'thunder', 'transform', 'giant_step', 'giant_roar', 'wall_crush', 'wall_break', 'boom', 'bell', 'scream', 'giant_grab', 'steam_blast', 'passby', 'giant_breath', 'rubble',
+  'thunder', 'transform', 'giant_step', 'giant_roar', 'wall_crush', 'wall_break', 'boom', 'bell', 'shout', 'hit_confirm', 'giant_grab', 'steam_blast', 'passby', 'rubble',
   'hook_fire', 'hook_hit_stone', 'hook_hit_wood', 'hook_hit_flesh', 'gas', 'slash', 'reel', 'nape_kill', 'body_hit', 'blade_swap', 'blade_break', 'gas_empty', 'grab', 'heartbeat',
   'giant_groan', 'giant_hurt', 'whoosh', 'steam_jet', 'crunch', 'steam', 'titan_step', 'titan_roar', 'titan_groan', 'cannon', 'giant_fall',
   'town_calm', 'crowd', 'war_bed'];
 const LOOPABLE = ['reel', 'steam', 'steam_jet'];
-const LAZY = new Set(['fire', 'giant_giggle', 'giant_bite']); // not used by the current scene: synthesised only on first request
+const LAZY = new Set(['fire', 'giant_giggle', 'giant_bite', 'giant_breath', 'scream', 'town_calm']); // not used by the current scene: synthesised only on first request
 const GROUP = { crunch: 'bite', giant_bite: 'bite', grab: 'grab', giant_grab: 'grab', steam: 'steam', steam_jet: 'steam', steam_blast: 'steam',
   hook_hit_stone: 'hook_hit', hook_hit_wood: 'hook_hit', hook_hit_flesh: 'hook_hit', titan_roar: 'roar', giant_roar: 'roar',
   titan_groan: 'groan', giant_groan: 'groan', giant_hurt: 'groan', wall_break: 'wall', wall_crush: 'wall' };
@@ -100,6 +100,7 @@ export async function create(ctx) {
   function remap(name, o) {
     if (name === 'hook_hit') return 'hook_hit_' + (o.surface || (simT - lastSurfaceT < 0.5 ? lastSurface : 'stone'));
     const c = C(), pos = o.position;
+    if (name === 'scream') return 'shout';
     if (!pos?.isVector3) return name;
     if (name === 'wall_break') {
       if ((o.volume ?? 1) < 1.2 && (pos.y > 32 || (c?.active && simT - lastWallBreak < 8))) return 'wall_crush';
@@ -111,7 +112,7 @@ export async function create(ctx) {
     const pp = ctx.player?.position, dPlayer = pp ? pos.distanceTo(pp) : 1e9;
     switch (name) {
       case 'titan_roar': return dHead < 55 ? 'giant_roar' : name;
-      case 'titan_groan': return dHead < 55 ? ((o.rate ?? 1) >= 1.1 ? 'giant_hurt' : 'giant_groan') : name;
+      case 'titan_groan': return dHead < 55 ? ((o.rate ?? 1) >= 1.1 ? 'giant_hurt' : 'giant_roar') : name;
       case 'titan_step': return dRoot < 70 ? 'giant_step' : name;
       case 'steam': return dRoot < 90 && pos.y > 12 ? 'steam_blast' : name;
       case 'gas': return (o.rate ?? 1) < 0.6 && dPlayer > 15 ? 'whoosh' : name;
@@ -190,7 +191,7 @@ export async function create(ctx) {
   on('hook:attach', (p) => { lastSurface = surfOf(p.hit); lastSurfaceT = simT; fb('hook_hit', { position: p.hit?.point, surface: lastSurface }); });
   on('player:slash', () => fb('slash'));
   on('player:kill', (p) => {
-    fb('nape_kill', { position: p.titan?.nape?.position }); duck(0.35, 1.2);
+    fb('nape_kill', { position: p.titan?.nape?.position }); if (p.boss) play('hit_confirm', { volume: 1.2 });
     if (!p.boss) setTimeout(() => score?.stinger(Math.max(1, ctx.director?.streak ?? ctx.hud?.streak ?? 1)), 60);
   });
   on('player:hurt', (p) => { const a = p.amount ?? 0.2; play('body_hit', { volume: 0.6 + Math.min(0.6, a) }); if (a > 0.25) mx?.shellshock(Math.min(1, a), 1.6); });
@@ -209,7 +210,7 @@ export async function create(ctx) {
     else fb('whoosh', { position: pt, volume: 1 }, 1); // swat / sweep / grab / lunge
   });
   let cuts = 0;
-  on('colossal:hurt', () => { cuts++; fb('giant_hurt', { position: headPos().clone() }, 1); score?.heroic(cuts); duck(0.25, 1); });
+  on('colossal:hurt', () => { cuts++; play('hit_confirm', { volume: 1 }); fb('giant_hurt', { position: headPos().clone(), volume: 0.8 }, 1); score?.heroic(cuts); });
   on('colossal:phase', (p) => {
     const ph = p.phase | 0; if (ph < 1) return;
     if (ctx.mode === 'play') music(ph >= 3 ? 'boss3' : ph === 2 ? 'boss2' : 'combat');
@@ -227,7 +228,7 @@ export async function create(ctx) {
   });
   on('building:collapse', (p) => { const pos = p.position || p.building?.center || p.point; if (pos?.isVector3) fb('rubble', { position: pos }); });
   const civPos = (p) => p.position || p.civ?.position || p.civilian?.position || p.civ?.object?.position || p.point || null;
-  on('civilian:grabbed', (p) => fb('scream', { position: civPos(p) || headPos().clone(), volume: 1.1, rate: 1 + Math.random() * 0.2 }));
+  on('civilian:grabbed', (p) => fb('shout', { position: civPos(p) || headPos().clone(), volume: 0.9 }));
   on('civilian:eaten', (p) => {
     fb('crunch', { position: civPos(p) || headPos().clone() }, 0.6);
   });
@@ -247,7 +248,7 @@ export async function create(ctx) {
     const c = C(), mode = ctx.mode, breached = !!ctx.world?.breached || breachT > 0;
     // ambience beds
     const wantCalm = !breached, wantWar = breached && mode !== 'title';
-    if (wantCalm && !calmLoop) calmLoop = loop('town_calm', { volume: 0.8, fadeIn: 3 });
+    if (false && wantCalm && !calmLoop) calmLoop = loop('town_calm', { volume: 0.8, fadeIn: 3 });
     if (!wantCalm && calmLoop) { calmLoop.stop(4); calmLoop = null; }
     if (wantWar && !warLoop) warLoop = loop('war_bed', { volume: 0.9, fadeIn: 5 });
     if (!wantWar && warLoop) { warLoop.stop(3); warLoop = null; }
@@ -261,7 +262,7 @@ export async function create(ctx) {
     } else if (breached && !crowdLoop && mode === 'play') crowdLoop = loop('crowd', { position: V(0, 8, 150), volume: 0.9, fadeIn: 4 });
     // the giant: breathing, steam vents, idle giggles
     const alive = c?.active && c.state !== 'dead' && c.state !== 'hidden';
-    if (alive && !breathLoop) breathLoop = loop('giant_breath', { position: headPos().clone(), volume: 0.9, fadeIn: 2 });
+    // (no idle breathing loop: user wants hype, not horror)
     if (!alive && breathLoop) { breathLoop.stop(2); breathLoop = null; }
     if (breathLoop) { breathLoop.setPosition(headPos()); breathLoop.setVolume(c.steaming ? 1.2 : 0.85, 0.5); }
     const steaming = alive && !!c.steaming;
@@ -269,7 +270,7 @@ export async function create(ctx) {
     else if (!steaming && steamLoop) { steamLoop.stop(1.2); steamLoop = null; }
     if (steamLoop) steamLoop.setPosition(c.nape?.position || headPos());
     if (alive && (c.fighting || mode === 'play' || mode === 'title')) {
-      giggleT -= dt;
+      giggleT -= dt * 0; // idle vocal disabled (no creepy groans between attacks)
       if (giggleT <= 0) {
         giggleT = 8 + Math.random() * 9;
         if (simT - lastGiantVoice > 4 && headPos().distanceTo(listenerPos) < 420) play('giant_groan', { position: headPos().clone(), volume: 0.9 + Math.random() * 0.2 });
@@ -290,7 +291,7 @@ export async function create(ctx) {
     if (!breached) return;
     // distant screams around town
     screamT -= dt;
-    if (screamT <= 0) { screamT = 2.5 + Math.random() * 6; const a = Math.random() * Math.PI * 2, r = 60 + Math.random() * 180; play('scream', { position: V(listenerPos.x + Math.cos(a) * r, 4, listenerPos.z + Math.sin(a) * r), volume: 0.6 + Math.random() * 0.5 }); }
+    if (screamT <= 0) { screamT = 2.5 + Math.random() * 6; const a = Math.random() * Math.PI * 2, r = 60 + Math.random() * 180; play('shout', { position: V(listenerPos.x + Math.cos(a) * r, 4, listenerPos.z + Math.sin(a) * r), volume: 0.6 + Math.random() * 0.5 }); }
     // garrison cannons firing from the wall top
     cannonT -= dt;
     if (cannonT <= 0) { cannonT = 9 + Math.random() * 16; const a = Math.PI / 2 + (Math.random() - 0.5) * 1.6, R = L.wall?.radius || 380; play('cannon', { position: V(Math.cos(a) * R, 52, Math.sin(a) * R), volume: 0.8 + Math.random() * 0.3 }); }

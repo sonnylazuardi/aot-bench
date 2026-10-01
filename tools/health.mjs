@@ -1,6 +1,6 @@
 // Integrated-build health check (headless, uses tools/shot.mjs and its slot queue).
-//   node tools/health.mjs            quick: /?skip=1 (load + 5 s of fight) and / (load + Begin + 10 s of intro)
-//   node tools/health.mjs --full     also plays the whole flow: intro -> fight -> phase 2/3 -> kill -> victory
+//   bun tools/health.mjs            quick: /?skip=1 (load + 5 s of fight) and / (load + Begin + 10 s of intro)
+//   bun tools/health.mjs --full     also plays the whole flow: intro -> fight -> phase 2/3 -> kill -> victory
 // Prints one summary line per run, then every [error]/[pageerror]/stub/timeout line. Exit code 1 if anything failed.
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -38,7 +38,7 @@ const PROBE = `(async () => {
 
 function run(url, flow) {
   const probe = PROBE.replace('__FLOW__', flow ? 'true' : 'false').replace('__FULL__', full ? 'true' : 'false').replace('__INTRO__', full ? '16' : '2');
-  const r = spawnSync(process.execPath, ['tools/shot.mjs', '--url', url, '--noshot', '--w', '640', '--h', '360', '--wait', '100', '--timeout', '300', '--print', probe],
+  const r = spawnSync('bun', ['tools/shot.mjs', '--url', url, '--noshot', '--w', '640', '--h', '360', '--wait', '100', '--timeout', '300', '--print', probe],
     { cwd: ROOT, encoding: 'utf8', timeout: 3000000, env: { ...process.env, AOT_SHOT_QUEUE_TIMEOUT: '1800', AOT_SHOT_PRIORITY: '1' } });
   const out = (r.stdout || '') + (r.stderr || '');
   const bad = out.split('\n').filter((l) => /\[error\]|\[pageerror\]|failed, using stub|timeout|\[tool\]|late |Error:/.test(l));

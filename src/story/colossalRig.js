@@ -165,7 +165,7 @@ export function createRig(root, bones, bdefs, bi) {
     // the neck carries more of the downward look so the chin doesn't fold onto the chest
     _q3.setFromEuler(_e.set(wp * 0.55 + pose.neckFwd, wy * 0.45, pose.tilt * 0.3, 'YXZ'));
     setGroupQuat(bone('neck'), _q3.premultiply(_q2.setFromAxisAngle(X, pose.lean * 0.2)));
-    _q3.setFromEuler(_e.set(Math.min(wp, 0.55) * 0.92 + pose.neckFwd * 0.6, wy, pose.tilt, 'YXZ'));
+    _q3.setFromEuler(_e.set(Math.min(wp, 0.32) * 0.92 + pose.neckFwd * 0.6, wy, pose.tilt, 'YXZ'));   // keep the face presented, not foreshortened
     setGroupQuat(bone('head'), _q3);
     bone('jaw').quaternion.setFromAxisAngle(X, 0.02 + pose.jaw * 0.5);
     root.updateMatrixWorld(true);

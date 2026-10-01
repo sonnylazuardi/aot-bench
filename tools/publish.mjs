@@ -1,5 +1,5 @@
 // Build the committed HEAD into dist/ and (re)start the stable preview server on :4173.
-//   node tools/publish.mjs [ref]    -> http://127.0.0.1:4173 serves exactly that commit (default HEAD)
+//   bun tools/publish.mjs [ref]    -> http://127.0.0.1:4173 serves exactly that commit (default HEAD)
 // The dev server (:5190) keeps hot-reloading for builders; the preview never reloads under the player.
 import { execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -20,7 +20,7 @@ try {
   fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(snap, 'node_modules'));
   const tmpOut = path.join(ROOT, 'dist.tmp');
   fs.rmSync(tmpOut, { recursive: true, force: true });
-  const log = sh(`nice -n 10 npx vite build --outDir ${JSON.stringify(tmpOut)} --emptyOutDir`, { cwd: snap });
+  const log = sh(`nice -n 10 bun node_modules/vite/bin/vite.js build --outDir ${JSON.stringify(tmpOut)} --emptyOutDir`, { cwd: snap });
   for (const l of log.split('\n')) if (/\[bake\]|built in|error/i.test(l)) console.log(l.trim());
   fs.writeFileSync(path.join(tmpOut, 'SNAPSHOT.txt'), `${hash}\n${new Date().toISOString()}\n`);
   const dist = path.join(ROOT, 'dist'), old = path.join(ROOT, 'dist.old');
@@ -39,7 +39,7 @@ try {
 } catch {}
 await new Promise((r) => setTimeout(r, 800));
 const out = fs.openSync('/tmp/claude-1000/aot-preview.log', 'w');
-const child = spawn(path.join(ROOT, 'node_modules/.bin/vite'), ['preview', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'],
+const child = spawn('bun', [path.join(ROOT, 'node_modules/vite/bin/vite.js'), 'preview', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'],
   { cwd: ROOT, detached: true, stdio: ['ignore', out, out] });
 child.unref();
 fs.writeFileSync(PIDFILE, String(child.pid));

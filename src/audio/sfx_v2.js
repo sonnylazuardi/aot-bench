@@ -34,7 +34,9 @@ export const V2 = {
     k.chain(k.noise(0, T0 + 0.1, 'pink'), k.sweep(k.bp(300, 0.8), [[0, 220], [T0, 1000]]), k.env([[0, 0], [T0 - 0.1, 0.6], [T0 + 0.05, 0]]), bus);
     const f0 = v ? 36 : 42;
     k.human(T0, L, { f0, contour: [[0, 0.75], [0.1, 1.3], [0.4, 1.22], [0.75, 1.08], [1, 0.62]], vowels: [[0, 'a'], [0.45, 'o'], [0.8, 'u']], scale: 0.42, breath: 0.6, rough: 0.9, jitter: 0.08, vib: 3.5, vibDepth: 0.035, wave: 'pressed', sub: 0.9, amp: 1, attack: 0.25, release: 1.5, drive: 6, dest: bus });
-    k.human(T0 + 0.3, L - 0.4, { f0: f0 * 4.6, contour: [[0, 0.65], [0.15, 1.2], [0.5, 1.3], [1, 0.7]], vowels: [[0, 'a'], [0.6, 'o']], scale: 0.85, breath: 0.3, rough: 0.5, vib: 5, vibDepth: 0.03, wave: 'pressed', amp: 0.4, attack: 0.6, release: 1.4, drive: 3, dest: bus });
+    k.thump(T0, { f0: 70, f1: 24, drop: 0.8, a: 0.01, d: 2.5, amp: 0.9, drive: 3, dest: k.via(k.lp(260), bus) }); // thunderous onset
+    k.chain(k.noise(T0, 0.4), k.hp(700), k.perc(T0, 0.002, 0.15, 0.6), bus);
+    if (0) k.human(T0 + 0.3, L - 0.4, { f0: f0 * 4.6, contour: [[0, 0.65], [0.15, 1.2], [0.5, 1.3], [1, 0.7]], vowels: [[0, 'a'], [0.6, 'o']], scale: 0.85, breath: 0.3, rough: 0.5, vib: 5, vibDepth: 0.03, wave: 'pressed', amp: 0.4, attack: 0.6, release: 1.4, drive: 3, dest: bus });
     k.chain(k.flutter(k.chain(k.noise(T0, L), k.bp(1100, 0.7)), 30, 0.85, 1), k.env([[0, 0], [0.4, 0.5], [4.5, 0.4], [L, 0]], T0), k.peak(1200, 1, 4), bus); // snarl
     k.chain(k.noise(T0, L), k.hp(3000), k.env([[0, 0], [0.5, 0.18], [L, 0]], T0), bus); // steam from the jaw
     k.chain(k.osc('sine', 29, T0, T0 + L), k.env([[0, 0], [0.8, 0.6], [4.6, 0.5], [L, 0]], T0), bus);
@@ -49,11 +51,38 @@ export const V2 = {
     k.chain(k.noise(t, 0.12), k.hp(900), k.perc(t, 0.0006, 0.05, 1), O);
     k.chain(k.noise(t, 0.3, 'pink'), k.bp(1500 + v * 200, 0.9), k.perc(t, 0.001, 0.12, 0.8), O);
     k.chain(k.noise(t, 0.6, 'pink'), k.bp(260 + v * 30, 0.9), k.perc(t, 0.003, 0.35, 1.2), O);
-    k.thump(t, { f0: 95, f1: 40, drop: 0.12, a: 0.003, d: 0.45, amp: 0.9, drive: 2.5, dest: O });
+    k.thump(t, { f0: 105, f1: 42, drop: 0.1, a: 0.002, d: 0.5, amp: 1.3, drive: 3, dest: O }); // punch
     k.thump(t, { f0: 50, f1: 22, drop: 0.5, a: 0.01, d: 1.6, amp: 0.7, drive: 2, dest: k.via(k.lp(150), O) });
     k.crackle(t + 0.003, 0.35, 50, { fLo: 700, fHi: 4500, amp: 0.55, dLo: 0.004, dHi: 0.03 });
     for (let i = 0; i < 40; i++) { const tt = t + 0.25 + Math.pow(k.r(), 1.4) * 1.8, big = k.r() < 0.3; k.hit(tt, { f: big ? k.rand(250, 800) : k.rand(1000, 4500), Q: k.rand(1, 3), d: big ? k.rand(0.06, 0.18) : k.rand(0.01, 0.04), amp: k.rand(0.15, 0.45) * (1 - (tt - t) / 2.4), color: big ? 'pink' : 'white' }); }
     k.chain(k.noise(0.05, 3, 'pink'), k.bp(700, 0.5), k.env([[0, 0], [0.15, 0.25], [2.8, 0]], 0.05), O); // dust & grit
+  } },
+  // weak-point cut confirm: bright metallic impact + clap + a bass drop
+  hit_confirm: { dur: 1.6, ch: 2, variants: 2, sat: 1.5, build(k, v) {
+    const O = k.out;
+    k.chain(k.noise(0, 0.1, 'white', 2), k.hp(2500), k.perc(0, 0.0005, 0.03, 1), O);
+    k.chain(k.noise(0, 0.2, 'pink', 2), k.bp(1200, 0.9), k.perc(0, 0.001, 0.06, 0.9), O);
+    k.ring(0.002, [[1568 * (v ? 1.122 : 1), 0.7, 1], [2349 * (v ? 1.122 : 1), 0.5, 0.8], [3136 * (v ? 1.122 : 1), 0.35, 0.6], [4699, 0.2, 0.4]], { d: 0.9, amp: 0.3, detune: 3 });
+    const o = k.osc('sine', 130, 0.01, 1.2); k.sweep(o, [[0, 130], [0.5, 38]], 0.01); k.chain(o, k.shaper(2), k.env([[0, 0], [0.01, 1], [0.6, 0.5], [1.1, 0]], 0.01), O); // bass drop
+    k.thump(0, { f0: 90, f1: 45, drop: 0.08, d: 0.3, amp: 0.8, drive: 2.5, dest: O });
+  } },
+  // soldier battle shout (2–4 men, pressed 'HAA!' / 'OHH!' / 'RAAH')
+  shout: { dur: 1.6, ch: 1, variants: 5, sat: 1.6, build(k, v) {
+    const n = 2 + (v % 3), vow = [['a'], ['o'], ['a', 'er'], ['ae'], ['o', 'a']][v];
+    for (let i = 0; i < n; i++) {
+      const t = k.rand(0, 0.08), L = k.rand(0.6, 1.1), f0 = k.rand(140, 200);
+      k.human(t, L, { f0, contour: [[0, 0.9], [0.15, 1.15], [0.7, 1.08], [1, 0.85]], vowels: vow.map((x, j) => [j * 0.5, x]), gender: 'm', rough: 0.45, breath: 0.25, breathLead: 0.03, wave: 'pressed', vib: 5, vibDepth: 0.02, jitter: 0.03, amp: k.rand(0.6, 1), attack: 0.03, release: 0.25, drive: 2.5 });
+    }
+  } },
+  // the garrison rallying: a bed of men shouting battle cries, horses, armour, distant drums of feet (replaces the panicking crowd)
+  crowd: { dur: 12, ch: 2, variants: 1, loop: 1.2, build(k) {
+    const bus = k.gain(0.9); k.chain(bus, k.hp(150), k.lp(4500), k.out);
+    for (let i = 0; i < 26; i++) {
+      const t = k.rand(0, 11), L = k.rand(0.5, 1.2), p = k.pan(k.rand(-0.95, 0.95)); p.connect(bus);
+      k.human(t, Math.min(L, 11.9 - t), { f0: k.rand(130, 210), contour: [[0, 0.9], [0.15, 1.15], [1, 0.85]], vowels: [[0, k.pick(['a', 'o', 'ae', 'er'])]], gender: 'm', rough: 0.4, breath: 0.25, wave: 'pressed', vib: 5, vibDepth: 0.02, amp: k.rand(0.25, 0.6), release: 0.2, drive: 2.2, dest: p });
+    }
+    for (let i = 0; i < 70; i++) k.hit(k.rand(0, 11.95), { f: k.rand(2500, 6000), Q: 5, d: 0.02, amp: k.rand(0.03, 0.08), pan: k.rand(-0.9, 0.9), dest: bus }); // armour / buckles
+    for (let i = 0; i < 90; i++) k.hit(k.rand(0, 11.95), { f: k.rand(500, 1300), Q: 1.4, d: 0.03, amp: k.rand(0.04, 0.1), color: 'pink', pan: k.rand(-0.9, 0.9), dest: bus }); // boots
   } },
   // ---- ODM gear
   // doppler-ish pass-by: air compressing against a wall / the titan's body as you skim past it

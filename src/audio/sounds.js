@@ -15,7 +15,8 @@ const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h =
 // the crowd and war beds are low-passed at 3.4 kHz -> 22.05 kHz. Player gear, UI and drums stay at 44.1 kHz.
 const LO = new Set(['steam_blast', 'wall_break', 'boom', 'cannon', 'rubble', 'thunder', 'transform', 'titan_step', 'titan_roar', 'titan_groan', 'steam', 'bell', 'fire', 'town_calm', 'scream',
   'giant_giggle', 'giant_breath', 'giant_groan', 'giant_hurt', 'giant_roar', 'giant_bite', 'giant_step', 'giant_grab', 'wall_crush', 'steam_jet', 'whoosh', 'giant_fall']);
-const VLO = new Set(['crowd', 'war_bed']);
+const VLO = new Set(['war_bed']);
+LO.add('crowd'); LO.add('shout');
 export const rateOf = (name) => (VLO.has(name) ? 22050 : LO.has(name) ? 32000 : SR);
 
 export async function renderSound(name, v = 0, asLoop = false) {

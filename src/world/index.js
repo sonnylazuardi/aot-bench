@@ -387,9 +387,6 @@ export async function create(ctx) {
     const gate = LAYOUT.outerGate;
     const pos = new THREE.Vector3(l.x, l.top, l.z);
     const dir = new THREE.Vector3(gate.x - l.x, 0, gate.z - l.z).normalize();
-    // stand a little towards the gate side of the platform (clear sightline over the parapet)
-    const inset = Math.min(l.w, l.d) * 0.18;
-    pos.addScaledVector(dir, inset);
     return { position: pos, facing: Math.atan2(dir.x, dir.z), dir, size: Math.min(l.w, l.d) - 1, kind: l.kind, height: l.top, distanceToGate: Math.hypot(gate.x - l.x, gate.z - l.z) };
   });
   world.landmarks.vantage = world.vantagePoints;
