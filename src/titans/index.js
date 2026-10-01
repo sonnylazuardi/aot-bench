@@ -33,6 +33,22 @@ export async function create(ctx) {
     return buildAllTemplates(EXTRA);
   }).then((t) => { Object.assign(templates, t); }).catch((e) => console.warn('[titans] templates failed', e));
   await Promise.race([coreP, new Promise((r) => setTimeout(r, 400))]);
+  // perf: shader/texture warm-up stand-in. The first real titan only spawns at the fight start (intro:done) — its skin
+  // program, its depth program and the 256² noise texture used to be built right then (~0.1–0.5 s hitch). One hidden,
+  // never-disposed rig keeps both programs linked (main.js warmShaders reveals hidden objects for its warm-up frames).
+  const warmGroup = new THREE.Group(); warmGroup.name = 'titans-warm'; warmGroup.visible = false;
+  ctx.scene.add(warmGroup);
+  const makeWarm = () => {
+    try {
+      const tpl = templates.average || Object.values(templates)[0]; if (!tpl || warmGroup.children.length) return;
+      const m = createSkinMaterial(tpl.meta);
+      const rig = new Rig(tpl, m.material, m.depth);
+      rig.mesh.frustumCulled = false;
+      warmGroup.position.set(ctx.LAYOUT.playerStart.x, -400, ctx.LAYOUT.playerStart.z);
+      warmGroup.add(rig.mesh);
+    } catch (e) { console.warn('[titans] warm-up rig', e); }
+  };
+  if (templates.average) makeWarm(); else coreP.then(makeWarm);
   const L = ctx.LAYOUT;
   const civilians = createCivilians(ctx);
   const all = [];     // every titan in the scene (incl. dying / evaporating)
