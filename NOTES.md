@@ -105,3 +105,19 @@ Append under your builder name. Lead reads this.
 - TITANS → COLOSSAL (critic r5): gripEvent's dust(16) at the parapet fogs the telephoto reveal shots (camera→head line passes ~6 m
   above the parapet). If possible spawn that dust ≥12 m below the parapet on the outer face (z > W.radius+14) and keep debris only
   at the top. (The intro now also clears fx at the over-the-shoulder shot, so it's not blocking.)
+- 20:40 tools/watch.sh (integrator, running): every ~10–15 min health check (priority shot slot) → if OK and HEAD moved, publish HEAD
+  to :4173. Load regression found: hud create 2.2–4.2 s = ui/screens.js grainURL per-pixel noise (sent to UI). perf.js now reports
+  GPU uploads/frame (tex/buffer MB; overlay line) — steady state ≈0.5 MB/frame, one 40 MB texture burst when world jobs finish.
+- 20:50 PAUSED by lead (user reviewing): watch.sh stopped, :4173 frozen on 331a67f. Resume with
+  `setsid nohup tools/watch.sh /tmp/claude-1000/aot-watch.log >/dev/null 2>&1 &` (health every ~12 min, auto-publish HEAD).
+  Open asks: UI grainURL (hud create 2.2–4.2 s), COLOSSAL shadow proxy (442 k shadow tris), TITANS civilians CPU/shadows,
+  RENDER fx far-particle skipping, WORLD one-time 40 MB texture burst at job end.
+- 20:58 UI fixed the HUD load regression (hud create 15 ms). WORLD TDZ bug in shot mode (terrain field job reads `const TF`
+  before init because the ?shot drain/await at world/index.js:152 runs before :186) → sent to WORLD. Real browser unaffected.
+- COLOSSAL: the giant casts shadows only from coarse proxy meshes (~17k tris, layer 0, colorWrite/depthWrite off, eroded to sit inside the skin); the hi-res giant has castShadow=false. No layer setup needed.
+- 21:25 Resumed watch.sh (health → auto-commit if dirty → publish HEAD to :4173). Colossal shadow proxies on layer 1 don't render:
+  SunLight cascades use shadow.getCamera(i) for the layer test, not shadow.camera → fix sent to COLOSSAL (+ RENDER note).
+  21:15 feedback leftovers: damage.js:115 house collapse (WORLD, callers listed), unused 'fire' synth (AUDIO), inferno presets (RENDER).
+- 21:20 CORRECTION (three r186): WebGLShadowMap tests caster layers against the MAIN view camera (renderObject :519-522), not the
+  shadow/cascade cameras → shadow-only proxies must be on layer 0 with colorWrite:false/depthWrite:false. Giant had no shadow in
+  2a4f746; fix sent to COLOSSAL. health.mjs now WARNs when shadow:colossal has 0 draws.

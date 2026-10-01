@@ -59,6 +59,7 @@ Surf wallStone(vec2 uv, vec3 tint, float ch, float bl, float seed, float y, floa
   vec4 blk = ashlarW(uv, ch, bl, seed);
   float e = blk.x;
   float lod = smoothstep(0.04, 0.16, gPx);
+  blk.y = mix(blk.y, 0.5, smoothstep(ch * 0.15, ch * 0.4, gPx));
   vec3 c = tint * (0.82 + 0.3 * blk.y);
   c *= 0.93 + 0.14 * hash12(vec2(floor(blk.z / 7.0), seed + 2.0));
   c *= 0.84 + 0.3 * nL(uv * 0.0035 + seed);
@@ -71,10 +72,10 @@ Surf wallStone(vec2 uv, vec3 tint, float ch, float bl, float seed, float y, floa
   c = mix(c, vec3(0.19, 0.18, 0.16) * (0.8 + 0.4 * g1), mort * 0.85);
   // faint joint lines survive at distance (courses read even far away)
   c *= 1.0 - lod * 0.18 * (1.0 - smoothstep(0.0, 0.25 + gPx * 0.6, e));
-  float st = smoothstep(0.52, 0.92, nH(vec2(uv.x * 0.23, uv.y * 0.011) + seed));
+  float st = smoothstep(0.52, 0.92, nM(vec2(uv.x * 0.06, uv.y * 0.008) + seed));
   float st2 = smoothstep(0.58, 0.95, nM(vec2(uv.x * 0.05, uv.y * 0.005) + seed * 2.0));
   c *= 1.0 - 0.32 * st - 0.22 * st2;
-  float lime = smoothstep(0.7, 0.95, nH(vec2(uv.x * 0.31 + 3.0, uv.y * 0.02)));
+  float lime = smoothstep(0.7, 0.95, nM(vec2(uv.x * 0.09 + 3.0, uv.y * 0.012)));
   c = mix(c, vec3(0.5, 0.49, 0.45), lime * 0.22);
   float baseH = 6.0 + 6.0 * nM(vec2(uv.x * 0.01, 0.5) + seed);
   float wet = 1.0 - smoothstep(0.0, baseH, y);
@@ -118,7 +119,7 @@ Surf surf() {
   }
   if (id < 3.5) { // heavy timber (gate leaves, carriages)
     float plank = abs(fract(uv.x / 0.42) - 0.5);
-    float g = nF(vec2(uv.x * 0.8, uv.y * 0.07));
+    float g = nH(vec2(uv.x * 0.3, uv.y * 0.07));
     vec3 c = tint * (0.6 + 0.6 * g) * (0.75 + 0.25 * smoothstep(0.43, 0.49, 0.5 - plank + 0.45));
     float band = 1.0 - aa(0.18, abs(fract(uv.y / 3.2) - 0.5) * 3.2 - 1.2);
     c = mix(c, vec3(0.035, 0.032, 0.03) * (0.8 + 0.5 * nH(uv * 2.0)), band);

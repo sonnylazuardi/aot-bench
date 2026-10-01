@@ -1,0 +1,158 @@
+{
+ "colossal": {
+  "body_1.2-d7fd1520": [
+   "body",
+   1.2
+  ],
+  "body_1.35-d30f2f30": [
+   "body",
+   1.35
+  ],
+  "body_s_3.5999999999999996-97295664": [
+   "body~s",
+   3.5999999999999996
+  ],
+  "body_s_4.050000000000001-2c134bce": [
+   "body~s",
+   4.050000000000001
+  ],
+  "hair_1.75-e0628444": [
+   "hair",
+   1.75
+  ],
+  "handL_1.1-64aba224": [
+   "handL",
+   1.1
+  ],
+  "handL_1.15-f2cd8ae3": [
+   "handL",
+   1.15
+  ],
+  "handL_s_3.3000000000000003-84a2a154": [
+   "handL~s",
+   3.3000000000000003
+  ],
+  "handL_s_3.4499999999999997-52e7f52e": [
+   "handL~s",
+   3.4499999999999997
+  ],
+  "handR_1.1-37e13a4e": [
+   "handR",
+   1.1
+  ],
+  "handR_1.15-0aca9611": [
+   "handR",
+   1.15
+  ],
+  "handR_s_3.3000000000000003-1170531e": [
+   "handR~s",
+   3.3000000000000003
+  ],
+  "handR_s_3.4499999999999997-a757051c": [
+   "handR~s",
+   3.4499999999999997
+  ],
+  "head_1.12-70a2b84b": [
+   "head",
+   1.12
+  ],
+  "head_1.22-06ce4042": [
+   "head",
+   1.22
+  ],
+  "head_1.38-9627e597": [
+   "head",
+   1.38
+  ],
+  "head_s_3.3600000000000003-b9a8e74d": [
+   "head~s",
+   3.3600000000000003
+  ],
+  "head_s_4.14-978e2303": [
+   "head~s",
+   4.14
+  ]
+ },
+ "titans": {
+  "abnormal-dfa3ac65": [
+   "abnormal",
+   {}
+  ],
+  "abnormal_lod1_true-3f850027": [
+   "abnormal",
+   {
+    "lod1": true
+   }
+  ],
+  "average-e7b8aeac": [
+   "average",
+   {}
+  ],
+  "average_lod1_true-7364021c": [
+   "average",
+   {
+    "lod1": true
+   }
+  ],
+  "bighead-7eff2341": [
+   "bighead",
+   {}
+  ],
+  "bighead_lod1_true-6ed5b29b": [
+   "bighead",
+   {
+    "lod1": true
+   }
+  ],
+  "fat-3f12ee4c": [
+   "fat",
+   {}
+  ],
+  "fat_lod1_true-d03fa4bc": [
+   "fat",
+   {
+    "lod1": true
+   }
+  ],
+  "gaunt-cb3e1202": [
+   "gaunt",
+   {}
+  ],
+  "gaunt_lod1_true-902ed2b2": [
+   "gaunt",
+   {
+    "lod1": true
+   }
+  ],
+  "lanky-8d6486c8": [
+   "lanky",
+   {}
+  ],
+  "lanky_lod1_true-5b35d3d0": [
+   "lanky",
+   {
+    "lod1": true
+   }
+  ],
+  "large-8de209b4": [
+   "large",
+   {}
+  ],
+  "large_lod1_true-d97fa504": [
+   "large",
+   {
+    "lod1": true
+   }
+  ],
+  "small-83dc07cc": [
+   "small",
+   {}
+  ],
+  "small_lod1_true-9b952d3c": [
+   "small",
+   {
+    "lod1": true
+   }
+  ]
+ }
+}

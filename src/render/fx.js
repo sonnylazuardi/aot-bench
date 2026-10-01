@@ -141,7 +141,8 @@ void main() {
   float mu = dot(vViewDir, uSunV);
   // forward scattering: thin edges glow when backlit by the low sun
   float thin = 1.0 - t.a * 0.75;
-  float fw = aotHG(mu, 0.6) * 4.0 * thin;
+  float lum = dot(vCol.rgb, vec3(0.3333));
+  float fw = aotHG(mu, 0.6) * 4.0 * thin * mix(0.25, 1.0, smoothstep(0.15, 0.7, lum)) * (1.0 - 0.7 * clamp(uAotInf.x, 0.0, 1.0));
   vec3 sunL = uAotSunCol * (wrap * wrap * 0.5 + fw * 0.35) * (0.25 + 0.75 * shade);
   vec3 amb = mix(uAmbBot, uAmbTop, clamp(n.y * 0.5 + 0.5, 0.0, 1.0)) * (0.55 + 0.45 * shade);
   vec3 col = vCol.rgb * (sunL + amb) + vCol.rgb * vMisc.w;
@@ -566,18 +567,18 @@ export async function create(ctx) {
     const oc = toRGB(opts.color);
     const cr = oc?.r ?? 0.6, cg = oc?.g ?? 0.53, cb = oc?.b ?? 0.44;
     const dir = opts.dir ? _dir.copy(opts.dir).setY(0).normalize() : null;
-    const life = opts.life ?? opts.duration ?? (big ? rand(14, 20) : 4 + Math.pow(size, 0.6) * 1.2);
+    const life = Math.min(opts.life ?? opts.duration ?? (big ? rand(12, 16) : 4 + Math.pow(size, 0.6) * 1.2), 18);
     const sp = Math.sqrt(size) * (opts.speed ?? 1);
     for (let k = 0; k < n; k++) {
       let ox, oz, vx, vz, vy, oy;
       if (big && dir) {
         // rolling wall of dust along `dir`, wide front, pushed hard then dragged
-        const lat = (Math.random() - 0.5) * size * 1.6, fw = Math.random() * size * 0.35;
+        const lat = (Math.random() - 0.5) * size * 1.0, fw = Math.random() * size * 0.3;
         ox = dir.x * fw - dir.z * lat; oz = dir.z * fw + dir.x * lat;
-        oy = Math.pow(Math.random(), 1.8) * size * 0.7;
-        const s = rand(10, 34) * (opts.speed ?? 1);
+        oy = Math.pow(Math.random(), 1.8) * Math.min(size * 0.7, 14);
+        const s = rand(6, 18) * (opts.speed ?? 1);
         vx = dir.x * s + (Math.random() - 0.5) * 6 - dir.z * lat * 0.05; vz = dir.z * s + (Math.random() - 0.5) * 6 + dir.x * lat * 0.05;
-        vy = rand(-1, 3) * (1 - oy / (size * 0.7));
+        vy = rand(-1, 1.5) * (1 - oy / 14);
       } else {
         const a = Math.random() * 6.283, r = Math.sqrt(Math.random()) * size * 0.35;
         ox = Math.cos(a) * r; oz = Math.sin(a) * r; oy = Math.random() * size * 0.2;
@@ -585,10 +586,10 @@ export async function create(ctx) {
         vx = Math.cos(a) * s; vz = Math.sin(a) * s; vy = rand(0.2, 1.4) * sp * 0.35;
         if (dir) { vx += dir.x * sp * 2; vz += dir.z * sp * 2; }
       }
-      const s0 = size * rand(0.18, 0.35), s1 = size * rand(0.7, 1.15) * (big ? 0.75 : 1);
+      const s0 = Math.min(size * rand(0.18, 0.35), 16), s1 = Math.min(size * rand(0.7, 1.15) * (big ? 0.75 : 1), 34);
       emit(smoke, pos.x + ox, baseY + oy + s0 * 0.25, pos.z + oz, vx, vy, vz, {
-        life: life * rand(0.7, 1.15), s0, s1, grow: 2.5, drag: big ? 0.22 : 0.9, buoy: big ? 0.25 : 0.12,
-        alpha: rand(0.45, 0.7) * (opts.alpha ?? 1), fin: 0.04, fout: 0.35,
+        life: life * rand(0.7, 1.0), s0, s1, grow: 2.5, drag: big ? 0.35 : 0.9, buoy: big ? 0.05 : 0.12,
+        alpha: rand(0.4, 0.6) * (big ? 0.8 : 1) * (opts.alpha ?? 1), fin: 0.04, fout: 0.3, kind: 5,
         r: cr * rand(0.85, 1.1), g: cg * rand(0.85, 1.08), b: cb * rand(0.85, 1.05),
         cell: Math.random() < 0.3 ? chunkCell() : puffCell(), shade: selfShade(ox, oy - size * 0.2, oz, size * 0.6),
         turb: 0.6, wind: 0.5, gnd: 1, gy: g0,
@@ -600,8 +601,8 @@ export async function create(ctx) {
       for (let k = 0; k < nc; k++) {
         const a = Math.random() * 6.283, r = Math.random() * size * 0.25;
         emit(smoke, pos.x + Math.cos(a) * r, baseY + size * 0.1, pos.z + Math.sin(a) * r, Math.cos(a) * sp * 0.8, rand(0.5, 2) * sp * 0.3, Math.sin(a) * sp * 0.8, {
-          life: life * 0.8, s0: size * 0.3, s1: size * 0.8, grow: 3, drag: 0.8, buoy: 0.2, alpha: 0.75, fin: 0.02, fout: 0.4,
-          r: cr * 0.9, g: cg * 0.88, b: cb * 0.86, cell: puffCell(), shade: 0.55, turb: 0.4, wind: 0.4, gnd: 1, gy: g0,
+          life: life * 0.8, s0: Math.min(size * 0.3, 14), s1: Math.min(size * 0.8, 30), grow: 3, drag: 0.8, buoy: 0.05, alpha: 0.6, fin: 0.02, fout: 0.35,
+          r: cr * 0.9, g: cg * 0.88, b: cb * 0.86, cell: puffCell(), shade: 0.55, turb: 0.4, wind: 0.4, gnd: 1, gy: g0, kind: 5,
         });
       }
     }
@@ -671,9 +672,9 @@ export async function create(ctx) {
           const ox = Math.cos(a) * r, oz = Math.sin(a) * r;
           const dark = o.fire ? rand(0.06, 0.12) : rand(0.08, 0.16);
           emit(smoke, p.x + ox, p.y + S * 0.4, p.z + oz, ox * 0.2, rand(3, 5.5) * Math.sqrt(S / 4), oz * 0.2, {
-            life: rand(16, 24), s0: S * rand(0.45, 0.7), s1: Math.min(S * rand(2.6, 3.8), 34), grow: 1.6, drag: 0.35, buoy: 0.6,
-            alpha: rand(0.26, 0.4), fin: 0.05, fout: 0.3,
-            r: dark * 1.1, g: dark, b: dark * 0.92, cell: puffCell(), shade: selfShade(ox, 0, oz, S * 0.4), emis: 0, turb: 0.8, wind: 1.6,
+            life: o.subtle ? rand(9, 13) : rand(16, 24), s0: S * rand(0.45, 0.7), s1: Math.min(S * rand(2.6, 3.8), o.subtle ? 14 : 34), grow: 1.6, drag: 0.35, buoy: 0.6,
+            alpha: rand(0.22, 0.34) * (o.subtle ? 0.55 : 1), fin: 0.05, fout: 0.25,
+            r: dark * 0.9, g: dark * 0.8, b: dark * 0.75, cell: puffCell(), shade: selfShade(ox, 0, oz, S * 0.4), emis: 0, turb: 0.8, wind: 1.6, kind: 4,
           });
         }
         if (this.fire) {
@@ -702,8 +703,9 @@ export async function create(ctx) {
       },
     };
   }
-  function fire(pos, size = 4) { const h = smokeColumn(pos || new THREE.Vector3(), size, { fire: true }); emitters.add(h); fires.add(h); return h; }
-  function smokeFn(pos, size = 6) { const h = smokeColumn(pos || new THREE.Vector3(), size, { fire: false }); emitters.add(h); return h; }
+  // user direction 21:15: minimal fire — small, subtle flames and thin wisps of smoke regardless of the requested size
+  function fire(pos, size = 2.5) { const h = smokeColumn(pos || new THREE.Vector3(), Math.min(size, 3.5) * 0.8, { fire: true, rate: 0.5, subtle: true }); emitters.add(h); fires.add(h); return h; }
+  function smokeFn(pos, size = 3) { const h = smokeColumn(pos || new THREE.Vector3(), Math.min(size, 5) * 0.7, { fire: false, rate: 0.5, subtle: true }); emitters.add(h); return h; }
   const fires = new Set();
 
   function debrisFn(pos, count = 12, speed = 10, opts = {}) {
@@ -905,8 +907,8 @@ export async function create(ctx) {
         r: 1, g: 1, b: 1, cell: puffCell(), kind: 3, turb: 1,
       });
     }
-    // mushroom: steam/smoke stem + rolling cap
-    const ns = Math.round(50 * QK);
+    // mushroom: steam/smoke stem + rolling cap (transformation-scale blasts only: small blasts must not brown the sky)
+    const ns = S >= 40 ? Math.round(50 * QK) : 0;
     for (let k = 0; k < ns; k++) {
       const h = Math.random();
       const a = Math.random() * 6.283, r = S * (0.15 + h * 0.1) * Math.random();
@@ -916,7 +918,7 @@ export async function create(ctx) {
         r: col, g: col * 0.97, b: col * 0.95, cell: puffCell(), shade: selfShade(Math.cos(a) * r, h * S * 0.4 - S * 0.2, Math.sin(a) * r, S * 0.4), emis: 0.25 * (1 - h), turb: 0.8, wind: 0.6,
       });
     }
-    const nc = Math.round(40 * QK);
+    const nc = S >= 40 ? Math.round(40 * QK) : 0;
     for (let k = 0; k < nc; k++) {
       const a = Math.random() * 6.283;
       const col = rand(0.78, 0.95);
@@ -1012,7 +1014,6 @@ export async function create(ctx) {
     }
     // hot breath of steam from the mouth
     if (opts.dir) steamJet(pos, opts.dir, size * 0.25, 1.2, { force: 4, alpha: 0.8 });
-    E.boost = Math.max(E.boost, 0.6);
   }
   /** giant footstep / hand slam: huge dust billow + dust ring + rubble */
   function stomp(pos, size = 40, opts = {}) {
@@ -1056,6 +1057,7 @@ export async function create(ctx) {
         const y = py[i];
         const hk = (y > 0 ? (y < 166 ? 1 + y * 0.012 : 3) : 1) * w * dt * 0.6;
         vx += (wx - vx * 0.15) * hk; vz += (wz - vz * 0.15) * hk;
+        if (kind === 4) { const x0 = px[i]; if (x0 > -70 && x0 < 70 && pz[i] > 120) vx += (x0 >= 0 ? 1.6 : -1.6) * dt; }
       }
       const tb = turb[i];
       if (tb > 0 && ((i + f4) & 3) === 0) { // turbulence is low frequency: staggered, 4x step every 4th frame
@@ -1077,6 +1079,39 @@ export async function create(ctx) {
     }
   }
 
+  // keep the boss readable: smoke between the camera and the giant fades (screen-space vs. its feet->head segment)
+  const occ = { on: false, ax: 0, ay: 0, bx: 0, by: 0, depth: 0, halfW: 0 };
+  const _gF = new THREE.Vector3(), _gH = new THREE.Vector3(), _vp = new THREE.Matrix4();
+  function setupOcclusion(camera) {
+    const C = ctx.colossal, o = C?.object;
+    occ.on = false;
+    if (!o || C.active === false || !o.visible) return;
+    o.getWorldPosition(_gF);
+    if (C.headPosition) _gH.copy(C.headPosition); else _gH.copy(_gF).setY(_gF.y + 60);
+    occ.depth = camPos.distanceTo(_gV.copy(_gF).lerp(_gH, 0.5));
+    _vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    _gV.copy(_gF).applyMatrix4(_vp); occ.ax = _gV.x * camera.aspect; occ.ay = _gV.y;
+    _gV.copy(_gH).applyMatrix4(_vp); occ.bx = _gV.x * camera.aspect; occ.by = _gV.y;
+    const f = camera.projectionMatrix.elements[5];
+    occ.halfW = 14 / Math.max(occ.depth, 1) * f;       // ~14 m half-width of the body, in NDC-y units
+    occ.f = f; occ.aspect = camera.aspect; occ.e = _vp.elements;
+    occ.on = occ.depth < 2500;
+  }
+  const _gV = new THREE.Vector3();
+  function occlusionFade(x, y, z, size) {
+    const e = occ.e;
+    const cw = e[3] * x + e[7] * y + e[11] * z + e[15];
+    if (cw <= 0.1 || cw > occ.depth - 8) return 1;               // behind the camera, or beside/behind the giant
+    const nx = (e[0] * x + e[4] * y + e[8] * z + e[12]) / cw * occ.aspect, ny = (e[1] * x + e[5] * y + e[9] * z + e[13]) / cw;
+    const sx = occ.bx - occ.ax, sy = occ.by - occ.ay, l2 = sx * sx + sy * sy || 1;
+    let t = ((nx - occ.ax) * sx + (ny - occ.ay) * sy) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const dx = nx - (occ.ax + sx * t), dy = ny - (occ.ay + sy * t);
+    const d = Math.sqrt(dx * dx + dy * dy);
+    const r = size * 0.5 / cw * occ.f;                           // particle screen radius
+    const k = (d - occ.halfW * 0.6) / (occ.halfW * 0.6 + r + 0.08);
+    return 0.15 + 0.85 * (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k));
+  }
+
   function writePool(P, mesh, sorted) {
     const g = mesh.geometry;
     const aP = g.attributes.aPos, aC = g.attributes.aCol, aM = g.attributes.aMisc, aV = g.attributes.aVel;
@@ -1094,11 +1129,18 @@ export async function create(ctx) {
       if (kind === 2) { // flame ramp: white-yellow core -> orange -> deep red
         const k = t;
         r = 9 * (1 - k) + 3 * k; gg = 6.5 * (1 - k) * (1 - k) + 0.5 * k; b = 2.5 * (1 - k) * (1 - k) * (1 - k) + 0.05;
+      } else if (kind === 5) { // ground dust: stays low (< ~25 m above its ground) and localized
+        const hy = P.py[i] - P.gy[i];
+        if (hy > 16) a *= hy > 28 ? 0 : 1 - (hy - 16) / 12;
+      } else if (kind === 4) { // town smoke near the breach stays under ~35 m (the boss stands there)
+        const bx = P.px[i], bz = P.pz[i] - 380;
+        if (bx * bx + bz * bz < 130 * 130) { const yy = P.py[i]; if (yy > 30) a *= yy > 45 ? 0 : 1 - (yy - 30) / 15; }
       } else if (kind === 3) { // fireball: blinding yellow -> orange -> dull red, fading
         const k = Math.min(t * 1.4, 1);
         r = 30 * (1 - k) + 2.2 * k; gg = 20 * (1 - k) * (1 - k) + 0.45 * k; b = 8 * Math.pow(1 - k, 3) + 0.08;
         a *= 1 - t * 0.5;
       }
+      if (sorted && occ.on && a > 0.002) a *= occlusionFade(P.px[i], P.py[i], P.pz[i], size);
       const o = j * 4;
       pa[o] = P.px[i]; pa[o + 1] = P.py[i]; pa[o + 2] = P.pz[i]; pa[o + 3] = size;
       ca[o] = r; ca[o + 1] = gg; ca[o + 2] = b; ca[o + 3] = a;
@@ -1313,6 +1355,7 @@ export async function create(ctx) {
     render(r, camera, target, depthTex) {
       camera.getWorldPosition(camPos);
       sortSmoke(camera);
+      setupOcclusion(camera);
       writePool(smoke, smokeMesh, true);
       writePool(glow, glowMesh, false);
       writeEmbers(camera);

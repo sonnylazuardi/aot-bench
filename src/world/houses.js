@@ -19,15 +19,17 @@ function maskOf(cols, nb, r, p) {
 // flower boxes under the windows of a face (local frame of the house): A -> B along the face, outward normal n
 function flowerBoxes(gb, mask, nb, bay, ax, az, ux, uz, nx, nz, ySill, ww, r) {
   for (let i = 0; i < Math.min(nb, 12); i++) {
-    if (!(mask & (1 << i)) || !r.chance(0.75)) continue;
+    if (!(mask & (1 << i)) || !r.chance(0.55)) continue;
     const u = (i + 0.5) * bay;
     const lx = ax + ux * u + nx * 0.13, lz = az + uz * u + nz * 0.13;
     DECOR.flowers.push({ x: gb.wx(lx, lz), y: ySill, z: gb.wz(lx, lz), a: Math.atan2(-(uz * gb.ca + ux * gb.sa), ux * gb.ca - uz * gb.sa), w: ww + 0.12, c: r.int(0, 3) });
   }
 }
 
-const PLASTER = [0xeee2c6, 0xe3c48c, 0xe6c3b2, 0xf0ece2, 0xead9a2, 0xd3d6d0, 0xe2b393, 0xd9cbb0, 0xe8d8b8, 0xc9b79a].map(lin);
-const ROOFS = [0x8e4a30, 0x7c3f2a, 0x9c5836, 0x6f4636, 0x5e4c46, 0xa66440, 0x844434, 0x73503e].map(lin);
+// lively Rothenburg / anime plaster colours (cream, ochre, butter yellow, pale rose, salmon, sky blue-grey, sage, white)
+const PLASTER = [0xf4e8cc, 0xecc98a, 0xf1dc92, 0xeec6b8, 0xf6f2e8, 0xd6e0e4, 0xe9b595, 0xdfe2c8, 0xf2dcae, 0xe6d2c0, 0xf7e2a8, 0xd9c6e0].map(lin);
+// clean fired terracotta with a few darker / browner roofs
+const ROOFS = [0xb0502e, 0x9c4428, 0xbf6236, 0xa84a2c, 0x8a4630, 0xc8703e, 0x93402a, 0x7e4a38].map(lin);
 const STONE_T = [0xb8ab94, 0xa89c88, 0xc2b69e, 0x9a9080].map(lin);
 
 // build one lot into gb (its chunk builder); returns the building record (id = lot.id + 1, 0 = never collapses)
@@ -228,9 +230,9 @@ function buildHouse(gb, lot, r, solids, b) {
   const tsUp = timber ? r.wpick([[4, TS.TIMBER], [3, TS.TIMBER_RICH], [1.2, TS.TIMBER_DENSE]]) : TS.PLASTER;
   const tsGround = shed ? TS.TIMBER : r.wpick([[timber ? 2 : 4, TS.PLASTER], [main ? 3 : 1.5, TS.STONE], [timber ? 2.5 : 0.5, tsUp]]);
   const wst = r.wpick([[5, 0], [2.5, 1], [1.3, 2], [0.8, 3]]);
-  const plaster = scalec(r.pick(PLASTER), r.range(0.82, 0.98));
+  const plaster = scalec(r.pick(PLASTER), r.range(0.9, 1.0));
   const stoneTint = scalec(r.pick(STONE_T), r.range(0.8, 1.0));
-  const roofTint = scalec(r.pick(ROOFS), r.range(0.85, 1.12));
+  const roofTint = scalec(r.pick(ROOFS), r.range(0.9, 1.1));
   const jetty = timber ? r.range(0.3, 0.5) : r.chance(0.3) ? 0.18 : 0;
   const backJetty = timber && r.chance(0.4);
   const gableFront = W < 9.5 ? r.chance(0.62) : r.chance(0.25);

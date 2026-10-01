@@ -11,7 +11,7 @@ uniform vec3 uSkyHor;
 uniform float uTime;
 uniform float uBumpK;
 varying vec4 vUV;
-varying vec4 vMat;
+flat varying vec4 vMat;
 varying vec3 vWPos;
 varying vec3 vWN;
 varying float vState;
@@ -24,7 +24,7 @@ float nL(vec2 p) { return texture(tNoise, p).r; }
 float nM(vec2 p) { return texture(tNoise, p).g; }
 float nH(vec2 p) { return texture(tNoise, p).b; }
 float nF(vec2 p) { return texture(tNoise, p).a; }
-float aa(float e, float x) { float w = max(fwidth(x), 1e-4) * 0.75; return smoothstep(e - w, e + w, x); }
+float aa(float e, float x) { float w = max(fwidth(x), 1e-4) * 1.0; return smoothstep(e - w, e + w, x); }
 float aaw(float e, float x, float w) { return smoothstep(e - w, e + w, x); }
 float rectAA(vec2 p, vec2 a, vec2 b) { return aa(a.x, p.x) * (1.0 - aa(b.x, p.x)) * aa(a.y, p.y) * (1.0 - aa(b.y, p.y)); }
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
@@ -147,7 +147,7 @@ float doorPx(inout Surf s, vec2 uv, vec2 a, vec2 b, float depth, vec3 doorC, vec
   float onD = rectAA(gp, a, vec2(b.x, b.y + (arch ? 5.0 : 0.0)));
   vec2 q = gp - a;
   float plank = abs(fract(q.x / 0.14) - 0.5);
-  vec3 wood = doorC * (0.75 + 0.35 * nF(vec2(q.x * 1.3, q.y * 0.08) + seed)) * (0.7 + 0.3 * smoothstep(0.38, 0.5, 0.5 - plank + 0.44));
+  vec3 wood = doorC * (0.75 + 0.35 * nH(vec2(q.x * 0.6, q.y * 0.08) + seed)) * (0.7 + 0.3 * smoothstep(0.38, 0.5, 0.5 - plank + 0.44));
   float band = (1.0 - aa(0.04, abs(q.y - 0.4))) + (1.0 - aa(0.04, abs(q.y - (b.y - a.y) + 0.55)));
   wood = mix(wood, vec3(0.03, 0.03, 0.03), clamp(band, 0.0, 1.0) * step(q.x, w * 0.6));
   vec3 c = mix(surround * 0.4, wood, onD);
@@ -156,8 +156,9 @@ float doorPx(inout Surf s, vec2 uv, vec2 a, vec2 b, float depth, vec3 doorC, vec
 }
 
 Surf facade(vec2 uv, float W, float fH, float bayW, float bits, vec3 tint, float seed) {
+  bits = floor(bits + 0.5);
   float wmask = floor(bits / 4096.0);
-  bits = mod(bits, 4096.0);
+  bits = bits - wmask * 4096.0;
   float fl = mod(bits, 8.0);
   float ts = mod(floor(bits / 8.0), 8.0);
   float wst = mod(floor(bits / 64.0), 4.0);
@@ -170,16 +171,16 @@ Surf facade(vec2 uv, float W, float fH, float bayW, float bits, vec3 tint, float
   // ---- plaster ----
   float n1 = nM(uv * 0.09 + seed * 3.7), n2 = nH(uv * 0.33 + seed * 1.3), n3 = nF(uv * 1.1 + seed);
   float blotch = nH(uv * 0.07 + seed * 2.1);
-  vec3 plaster = tint * (0.84 + 0.26 * n1 + 0.1 * (n2 - 0.5)) * (0.9 + 0.2 * blotch);
+  vec3 plaster = tint * (0.9 + 0.16 * n1 + 0.06 * (n2 - 0.5)) * (0.95 + 0.1 * blotch);
   float stain = smoothstep(0.5, 0.85, nM(uv * vec2(0.22, 0.07) + seed * 7.0));
-  plaster *= 1.0 - 0.2 * stain;
-  float streak = smoothstep(0.55, 0.9, nH(vec2(uv.x * 0.9, uv.y * 0.05) + seed)) ;
-  plaster *= 1.0 - 0.12 * streak;
-  plaster *= 1.0 - 0.1 * (1.0 - smoothstep(0.0, 0.8, uv.y));
+  plaster *= 1.0 - 0.1 * stain;
+  float streak = smoothstep(0.55, 0.9, nM(vec2(uv.x * 0.12, uv.y * 0.03) + seed));
+  plaster *= 1.0 - 0.07 * streak;
+  plaster *= 1.0 - 0.08 * (1.0 - smoothstep(0.0, 0.8, uv.y));
   Surf s = surfInit(plaster, 0.93);
   s.h = (n2 - 0.5) * 0.004;
 
-  vec3 wc = woodCol(wst) * (0.8 + 0.35 * nF(uv * vec2(0.4, 2.5) + seed));
+  vec3 wc = woodCol(wst) * (0.8 + 0.35 * mix(nH(uv * vec2(0.15, 0.9) + seed), 0.5, smoothstep(0.01, 0.04, gPx)));
   float nb = max(1.0, floor(W / bayW + 0.5));
   float bw = W / nb;
   float bi = clamp(floor(uv.x / bw), 0.0, nb - 1.0);
@@ -287,7 +288,7 @@ Surf facade(vec2 uv, float W, float fH, float bayW, float bits, vec3 tint, float
         float sh = max(sl, sr);
         float pal = hash12(vec2(seed, 6.6));
         vec3 shC = pal < 0.3 ? vec3(0.05, 0.12, 0.06) : pal < 0.55 ? vec3(0.18, 0.04, 0.03) : pal < 0.75 ? vec3(0.08, 0.1, 0.13) : vec3(0.12, 0.07, 0.035);
-        float plank = abs(fract(uv.x / 0.11) - 0.5);
+        float plank = mix(abs(fract(uv.x / 0.11) - 0.5), 0.25, smoothstep(0.02, 0.05, gPx));
         float zb = 1.0 - aa(0.035, abs(fract((uv.y - a.y) / max(b.y - a.y, 0.1) * 3.0) - 0.5) * (b.y - a.y) / 3.0 * 2.0 - 0.0) ;
         vec3 shutC = shC * (0.75 + 0.4 * nF(uv * vec2(1.0, 0.1) + seed)) * (0.8 + 0.2 * smoothstep(0.4, 0.5, 0.95 - plank));
         shutC *= 1.0 - 0.2 * step(0.9, 1.0 - abs(fract((uv.y - a.y) / 0.5) - 0.5) * 2.0);
@@ -330,8 +331,8 @@ Surf roofTiles(vec2 uv, vec3 tint, float bits, float seed) {
   float kind = mod(bits, 4.0);
   // per-roof character: value / hue jitter (terracotta -> brown -> weathered grey), age
   float rv = hash12(vec2(seed, 5.1)), rh = hash12(vec2(seed, 6.2)), age = hash12(vec2(seed, 7.3));
-  tint *= 0.8 + 0.38 * rv;
-  tint = mix(tint, vec3(luma(tint)) * vec3(1.05, 0.95, 0.9), smoothstep(0.55, 1.0, rh) * 0.55);
+  tint *= 0.86 + 0.28 * rv;
+  tint = mix(tint, vec3(luma(tint)) * vec3(1.05, 0.95, 0.9), smoothstep(0.82, 1.0, rh) * 0.4);
   tint = mix(tint, tint * vec3(1.12, 0.92, 0.72), (1.0 - smoothstep(0.0, 0.6, rh)) * 0.35);
   Surf s = surfInit(tint, 0.78);
   if (kind > 0.5 && kind < 1.5) {
@@ -378,14 +379,14 @@ Surf roofTiles(vec2 uv, vec3 tint, float bits, float seed) {
   // age: lichen / moss (more towards the eave and on old roofs), rain streaks down the slope, soot near the ridge
   float moss = smoothstep(0.6, 0.85, nM(uv * vec2(0.15, 0.25) + seed * 3.0)) * (0.35 + 0.65 * (1.0 - smoothstep(0.0, 7.0, uv.y))) * (0.3 + 0.9 * age);
   vec3 mossC = mix(vec3(0.1, 0.11, 0.045), vec3(0.28, 0.27, 0.18), step(0.5, nF(uv * 0.7 + seed))) * (0.8 + 0.3 * nF(uv * 2.0));
-  float streak = smoothstep(0.45, 0.85, nH(vec2(uv.x * 0.6, uv.y * 0.035) + seed));
-  c *= 1.0 - (0.22 + 0.2 * age) * streak;
-  c = mix(c, mossC, clamp(moss, 0.0, 1.0) * 0.7);
+  float streak = smoothstep(0.45, 0.85, nM(vec2(uv.x * 0.15, uv.y * 0.02) + seed));
+  c *= 1.0 - (0.12 + 0.12 * age) * streak;
+  c = mix(c, mossC, clamp(moss, 0.0, 1.0) * 0.45);
   float soot = smoothstep(0.7, 0.92, nL(vec2(uv.x * 0.08, uv.y * 0.012) + seed * 2.3)) * smoothstep(2.0, 8.0, uv.y);
-  c *= 1.0 - 0.45 * soot;
+  c *= 1.0 - 0.25 * soot;
   float bleach = smoothstep(0.6, 0.9, nL(uv * 0.07 + seed * 1.3));
   c = mix(c, c * 1.2 + 0.015, bleach * 0.4);
-  c *= 0.82 + 0.36 * nL(uv * 0.025 + seed);
+  c *= 0.9 + 0.2 * nL(uv * 0.025 + seed);
   s.alb = c;
   s.rough = 0.7 + 0.2 * moss - 0.1 * patchA;
   s.h = (1.0 - lod) * (-ly * 0.035 + gap * -0.012 - miss * 0.03);
@@ -394,7 +395,7 @@ Surf roofTiles(vec2 uv, vec3 tint, float bits, float seed) {
 }
 
 Surf woodSurf(vec2 uv, vec3 tint, float bits, float seed) {
-  float g = nF(vec2(uv.x * 0.35, uv.y * 4.0) + seed);
+  float g = mix(nH(vec2(uv.x * 0.12, uv.y * 1.2) + seed), 0.5, smoothstep(0.01, 0.04, gPx));
   Surf s = surfInit(tint * (0.7 + 0.5 * g), 0.8);
   if (mod(bits, 2.0) > 0.5) { // jetty band with joist ends
     float f = abs(fract(uv.x / 0.58) - 0.5) * 0.58;
@@ -412,7 +413,8 @@ Surf brickSurf(vec2 uv, vec3 tint, float seed) {
   float e = min(min(f.x, 1.0 - f.x) * 0.26, min(f.y, 1.0 - f.y) * 0.075);
   float m = 1.0 - aa(0.008, e);
   m *= 1.0 - smoothstep(0.01, 0.03, gPx);
-  vec3 c = tint * (0.7 + 0.5 * hash12(vec2(floor(x), row) + seed));
+  float bk = 1.0 - smoothstep(0.015, 0.04, gPx);
+  vec3 c = tint * (0.7 + 0.5 * mix(0.5, hash12(vec2(floor(x), row) + seed), bk));
   c = mix(c, vec3(0.3, 0.29, 0.27), m * 0.8);
   // soot near the top
   c *= 1.0 - 0.6 * smoothstep(0.6, 1.4, uv.y - vMat.z + 1.4);
@@ -423,6 +425,7 @@ Surf brickSurf(vec2 uv, vec3 tint, float seed) {
 
 Surf stoneSurf(vec2 uv, vec3 tint, float ch, float seed) {
   vec4 blk = ashlar(uv, ch, ch * 1.9, seed);
+  blk.y = mix(blk.y, 0.5, smoothstep(ch * 0.12, ch * 0.35, gPx));
   vec3 c = tint * (0.78 + 0.3 * blk.y) * (0.85 + 0.25 * nH(uv * 0.6 + seed));
   float m = 1.0 - aa(0.015, blk.x);
   m *= 1.0 - smoothstep(0.03, 0.08, gPx);
@@ -489,7 +492,7 @@ const VERT_DECL = /* glsl */`
 attribute vec4 aUV;
 attribute vec4 aMat;
 varying vec4 vUV;
-varying vec4 vMat;
+flat varying vec4 vMat;
 varying vec3 vWPos;
 varying vec3 vWN;
 varying float vState;
@@ -557,10 +560,13 @@ function injectCommon(sh, uniforms, fragDecl, surfCall = 'surf()') {
         vec2 dx = dFdx(uvB), dy = dFdy(uvB);
         float hx = dFdx(S.h), hy = dFdy(S.h);
         float det = dx.x * dy.y - dx.y * dy.x;
-        vec2 g = abs(det) > 1e-10 ? vec2(hx * dy.y - dx.y * hy, dx.x * hy - dy.x * hx) / det : vec2(0.0);
+        // grazing views make the uv derivatives nearly collinear: det -> 0 gave inf/NaN normals (crawling streaks)
+        float scl = length(dx) * length(dy);
+        vec2 g = abs(det) > 0.05 * scl && scl > 1e-14 ? vec2(hx * dy.y - dx.y * hy, dx.x * hy - dy.x * hx) / det : vec2(0.0);
+        g = clamp(g, vec2(-3.0), vec2(3.0));
         // sub-pixel relief turns into per-pixel normal noise: clamp the slope and fade relief as texels shrink
         float gl = length(g); if (gl > 1.4) g *= 1.4 / gl;
-        g *= (1.0 - smoothstep(0.015, 0.07, gPx)) * uBumpK;
+        g *= (1.0 - smoothstep(0.008, 0.035, gPx)) * uBumpK;
         vec3 nw = normalize(gN0 - gT * g.x - gB * g.y);
         normal = normalize((viewMatrix * vec4(nw, 0.0)).xyz);
       }`)

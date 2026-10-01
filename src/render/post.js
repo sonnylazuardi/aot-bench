@@ -4,7 +4,7 @@
 // overlays] -> [SMAA + grain] -> screen. Gameplay API: flash(k), punch(k), setDamage(k), setSlowmo(k), speed blur.
 import * as THREE from 'three';
 import {
-  EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, SMAAPreset, EdgeDetectionMode,
+  EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, SMAAPreset, EdgeDetectionMode, DepthOfFieldEffect,
   Effect, EffectAttribute, BlendFunction, Pass,
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
@@ -113,20 +113,21 @@ void mainImage(const in vec4 inputColor, const in vec2 uv0, out vec4 outputColor
     float sr = length(sd);
     float x = (sr - uShock.z) / 0.045;
     float w = exp(-x * x) * uShock.w;
-    uv -= (sd / max(sr, 1e-4)) / vec2(aspect, 1.0) * w * x * 0.022;
-    shockLit = w * max(-x, 0.0);
+    uv -= (sd / max(sr, 1e-4)) / vec2(aspect, 1.0) * w * x * 0.008;
+    shockLit = 0.0;
   }
   uv = clamp(uv, texelSize * 0.5, 1.0 - texelSize * 0.5);
   vec2 d = uv - uCenter;
   float r = length(d * vec2(aspect, 1.0));
-  float blur = uFx.w * 0.07 + uFx2.x * 0.05;
-  float ca = uFx2.z * (0.35 + r * 1.4) * 0.0025 + uFx.w * 0.008;
+  float blur = uFx.w * 0.018 + uFx2.x * 0.045;
+  float ca = uFx2.z * (0.35 + r * 1.4) * 0.0018 + uFx.w * 0.0015;
   vec3 col;
   if (blur > 0.0008) {
     float edge = smoothstep(0.05, 0.75, r);
     vec3 acc = vec3(0.0);
+    float jit = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
     for (int i = 0; i < 10; i++) {
-      float s = 1.0 - blur * edge * (float(i) / 9.0);
+      float s = 1.0 - blur * edge * ((float(i) + jit) / 10.0);
       vec2 p = uCenter + d * s;
       acc.r += texture2D(inputBuffer, clamp(uCenter + d * (s + ca), 0.0, 1.0)).r;
       acc.g += texture2D(inputBuffer, p).g;
@@ -248,6 +249,15 @@ export async function create(ctx) {
   const shafts = q !== 'low' ? new ShaftsPass(ctx, q === 'high' ? 28 : 18) : null;
   if (shafts) composer.addPass(shafts);
 
+  // cinematic depth of field (only while the intro / cine cameras own the view)
+  let dof = null, dofPass = null;
+  if (q !== 'low') {
+    dof = new DepthOfFieldEffect(camera, { focusDistance: 60, focusRange: 40, bokehScale: 1.6, resolutionScale: 0.5 });
+    dofPass = new EffectPass(camera, dof);
+    dofPass.enabled = false;
+    composer.addPass(dofPass);
+  }
+
   const bloom = new BloomEffect({
     mipmapBlur: true, intensity: 0.75, luminanceThreshold: 1.1, luminanceSmoothing: 0.35, radius: 0.72,
     levels: q === 'low' ? 5 : 7,
@@ -267,7 +277,7 @@ export async function create(ctx) {
   const G = grade.uniforms;
   const uShock = G.get('uShock').value;
   const uFx = G.get('uFx').value, uFx2 = G.get('uFx2').value, uFx3 = G.get('uFx3').value, uCenter = G.get('uCenter').value;
-  const settings = { exposure: 1.15, ca: 1.0, vignette: 0.42, saturation: 1.1, contrast: 0.16, shafts: 0.9, grain: 0.03, bloom: 0.75 };
+  const settings = { exposure: 1.15, ca: 0.6, vignette: 0.42, saturation: 1.1, contrast: 0.16, shafts: 0.9, grain: 0.016, bloom: 0.75 };
   const tmpV = new THREE.Vector3(), sunV = new THREE.Vector3(), camDir = new THREE.Vector3();
   const foe = new THREE.Vector2(0.5, 0.5);
 
@@ -299,8 +309,8 @@ export async function create(ctx) {
       uShock.set(behind ? 0.5 : tmpV.x * 0.5 + 0.5, behind ? 0.5 : tmpV.y * 0.5 + 0.5, st.shockR, st.shockAmp * (behind ? 0.5 : 1));
     } else uShock.w = 0;
     uFx.set(Math.min(st.flash, 1.2), st.damage, st.slowmo, st.punch);
-    uFx2.set(st.speed * 0.9, settings.exposure * (ctx.sky?.exposureK ?? 1), settings.ca + st.punch * 2, settings.vignette);
-    uFx3.set(0, st.time % 1000, settings.saturation * (1 - st.slowmo * 0.3), settings.contrast + (ctx.sky?.contrastK ?? 0) + st.slowmo * 0.2);
+    uFx2.set(st.speed * 0.9, settings.exposure * (ctx.sky?.exposureK ?? 1), settings.ca * (1 - Math.min(ctx.trauma ?? 0, 1) * 0.7) + st.punch * 0.5, settings.vignette);
+    uFx3.set(0, st.time % 1000, (ctx.sky?.satK ?? settings.saturation) * (1 - st.slowmo * 0.3), settings.contrast + (ctx.sky?.contrastK ?? 0) + st.slowmo * 0.2);
     G.get('uFlashCol').value.copy(st.flashCol);
     bloom.intensity = settings.bloom * (ctx.sky?.bloomK ?? 1);
     // shafts: sun screen position and facing
@@ -322,12 +332,51 @@ export async function create(ctx) {
     grain.uniforms.get('uSeed').value = (st.time * 60) % 97;
   }
 
+  const focusV = new THREE.Vector3(), focusTmp = new THREE.Vector3();
+  const dofState = { k: 0, dist: 60, override: null, overrideT: -1 };
+  function subjectDistance() {
+    // nearest framed subject: the giant's head, then the player
+    let best = Infinity;
+    const test = (p) => {
+      if (!p) return;
+      focusTmp.copy(p).project(camera);
+      if (focusTmp.z > 1 || Math.abs(focusTmp.x) > 0.85 || Math.abs(focusTmp.y) > 0.9) return;
+      const d = camera.position.distanceTo(p);
+      if (d < best) best = d;
+    };
+    test(ctx.colossal?.headPosition);
+    if (ctx.player?.object?.visible !== false) test(ctx.player?.center || ctx.player?.position);
+    return best;
+  }
+  function updateDof(dt) {
+    if (!dofPass) return;
+    const cine = ctx.cameraOwner === 'intro';
+    dofState.k += ((cine ? 1 : 0) - dofState.k) * (1 - Math.exp(-dt * 4));
+    const on = dofState.k > 0.02;
+    if (dofPass.enabled !== on) dofPass.enabled = on;
+    if (!on) return;
+    let d = dofState.override != null && st.time - dofState.overrideT < 1 ? dofState.override : subjectDistance();
+    if (!Number.isFinite(d)) d = 120;
+    dofState.dist += (d - dofState.dist) * (1 - Math.exp(-dt * 3));
+    const cm = dof.cocMaterial;
+    cm.focusDistance = dofState.dist;
+    cm.focusRange = Math.max(10, dofState.dist * 0.7);
+    dof.bokehScale = 1.6 * dofState.k;
+  }
+
   const api = {
-    composer, bloom, grade, ao, settings,
+    composer, bloom, grade, ao, settings, dof,
+    /** cinematic focus: a world point or a distance in metres (holds ~1 s; call every frame to keep it) */
+    setFocus(v) {
+      if (v == null) { dofState.override = null; return; }
+      dofState.override = typeof v === 'number' ? v : camera.position.distanceTo(focusV.copy(v));
+      dofState.overrideT = st.time;
+    },
     render(rawDt = 1 / 60) {
       camera.updateMatrixWorld();
       ctx.sky?.renderClouds?.(camera);
       updateUniforms(rawDt);
+      updateDof(rawDt);
       composer.render(rawDt);
     },
     /** full-screen flash (white-yellow), decays. k ~0.3 small, 1 blinding */
@@ -344,7 +393,7 @@ export async function create(ctx) {
       if (!pos) return;
       const d = camera.position.distanceTo(pos);
       st.shockPos.copy(pos); st.shockR = 0.02; st.shockAmp = k * THREE.MathUtils.clamp(1.3 - d / 1200, 0.3, 1);
-      st.punch = Math.max(st.punch, 0.35 * k);
+      st.punch = Math.max(st.punch, 0.2 * k);
     },
     setDamage(k = 0) { st.damageTarget = THREE.MathUtils.clamp(k, 0, 1); },
     setSlowmo(k = 0) { st.slowTarget = THREE.MathUtils.clamp(k, 0, 1); },

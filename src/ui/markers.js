@@ -17,7 +17,7 @@ const SVG_LIMB = `<svg class="ic" viewBox="-34 -34 68 68" fill="none" stroke="cu
 const SVG_NAPE = `<svg class="ic" viewBox="-34 -34 68 68" fill="none" stroke="currentColor"><g class="xbig" stroke-width="2"><circle r="24" stroke-dasharray="6 5"/></g>
   <circle r="15" stroke-width="3"/><path d="M-12,-12 L-5,-5 M12,-12 L5,-5 M-12,12 L-5,5 M12,12 L5,5" stroke-width="3" stroke-linecap="round"/><circle r="2.2" fill="currentColor" stroke="none"/></svg>`;
 
-export function createMarkers(ctx, parent) {
+export function createMarkers(ctx, parent, reservedEls = () => []) {
   const layer = document.createElement('div'); layer.className = 'layer';
   parent.appendChild(layer);
   const mk = (cls, html) => { const e = document.createElement('div'); e.className = 'mk ' + cls; e.innerHTML = html; e.style.opacity = '0'; layer.appendChild(e); return e; };
@@ -65,7 +65,36 @@ export function createMarkers(ctx, parent) {
     const rx = W * 0.44, ry = H * 0.38, t = 1 / Math.sqrt((dx / rx) ** 2 + (dy / ry) ** 2);
     return { x: W / 2 + dx * t, y: H / 2 + dy * t, on: false, ang: Math.atan2(dy, dx) };
   }
-  const place = (e, s) => { e.style.transform = `translate3d(${s.x.toFixed(1)}px,${s.y.toFixed(1)}px,0)`; };
+  const placed = [];
+  const place = (e, s) => { placed.push({ e, x: s.x, y: s.y, edge: !s.on }); };
+  // reserved HUD rects (layout read only on resize / every 2 s, never per frame)
+  let rects = [], rectT = 0;
+  addEventListener('resize', () => { rectT = 0; });
+  function measure(dt) {
+    rectT -= dt; if (rectT > 0) return; rectT = 2;
+    rects = reservedEls().map((e) => { const r = e.getBoundingClientRect(); return { l: r.left - 12, t: r.top - 12, r: r.right + 12, b: r.bottom + 12 }; }).filter((r) => r.r - r.l > 30);
+  }
+  function keepOut(p) {
+    for (let pass = 0; pass < 2; pass++) for (const r of rects) {
+      if (p.x < r.l || p.x > r.r || p.y < r.t || p.y > r.b) continue;
+      const opts = [[0, r.b - p.y], [0, r.t - p.y], [r.l - p.x, 0], [r.r - p.x, 0]]
+        .filter(([dx, dy]) => { const x = p.x + dx, y = p.y + dy; return x > 16 && x < VW - 16 && y > 16 && y < VH - 16; });
+      if (!opts.length) continue;
+      opts.sort((a, b) => Math.hypot(...a) - Math.hypot(...b));
+      p.x += opts[0][0]; p.y += opts[0][1];
+    }
+  }
+  function flush() {
+    for (const p of placed) keepOut(p);
+    // edge labels: sort by y, keep ≥ 26 px apart when horizontally close so arrows never cover another label
+    const edges = placed.filter((p) => p.edge).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < edges.length; i++) for (let j = 0; j < i; j++) {
+      const a = edges[j], b = edges[i];
+      if (Math.abs(a.x - b.x) < 170 && b.y - a.y < 26) b.y = a.y + 26;
+    }
+    for (const p of placed) p.e.style.transform = `translate3d(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px,0)`;
+    placed.length = 0;
+  }
 
   function hideAll() {
     for (const m of pool) setOp(m.last, m.e, '0');
@@ -89,8 +118,12 @@ export function createMarkers(ctx, parent) {
   const central = (s) => s.on && rDist(s) < 120;
   const opStr = (v, s) => String(Math.round(v * (crowded(s) ? 0.25 : 1) * 100) / 100);
 
-  function update() {
+  function update(dt = 0.016) {
     const P = ctx.player; if (!P?.position) return hideAll();
+    measure(dt);
+    try { updateInner(P); } finally { flush(); }
+  }
+  function updateInner(P) {
     const pp = P.position;
     playerBox(P);
     // ---------------- boss weak points

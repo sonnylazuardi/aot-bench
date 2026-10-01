@@ -21,10 +21,10 @@ export function controlsHTML(ctx, heading = 'Controls') {
     `<div class="note">Only a deep cut to the nape — one metre long, ten centimetres deep — kills a titan. Anchor, swing past, and strike at speed.</div>`;
 }
 
+// film grain: browser-rasterised SVG turbulence (no per-pixel JS at load)
 function grainURL() {
-  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'); const d = g.createImageData(256, 256);
-  for (let i = 0; i < d.data.length; i += 4) { const v = Math.random() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
-  g.putImageData(d, 0, 0); return c.toDataURL();
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
 
 const QUALS = ['low', 'medium', 'high'];
@@ -70,7 +70,7 @@ export function buildTitle(ctx) {
     s.style.cssText = `left:${(Math.random() * 100).toFixed(1)}%;--dx:${(Math.random() * 30 - 8).toFixed(0)}vw;animation-duration:${(9 + Math.random() * 12).toFixed(1)}s;animation-delay:${(-Math.random() * 20).toFixed(1)}s;${big ? 'width:4px;height:4px;' : ''}opacity:0`;
     ash.appendChild(s);
   }
-  const grain = el('div', 'grain'); grain.style.backgroundImage = `url(${grainURL()})`;
+  const grain = el('div', 'grain'); grain.style.backgroundImage = `url("${grainURL()}")`; grain.style.backgroundSize = '160px 160px';
   root.append(el('div', 'shade'), ash, grain);
   root.appendChild(el('div', 'top', `<span>Year 845 · Wall Maria · Shiganshina District</span><span>Unofficial fan tribute</span>`));
   const block = el('div', 'block', `
@@ -126,7 +126,7 @@ const TIPS = [
   'When its skin starts to boil, get clear. The steam will blow you out of the sky.',
   'Gas is life. Crates on the church roof and on the wall walkway refill your canisters and replace every blade.',
   'Anchor to its body and you ride its every move. Its hands are faster than they look.',
-  'It is drawn to people. Every townsperson it catches buys you a moment — and costs a life.',
+  'Its steam scalds everything near the body. Townspeople caught in it, or under falling stone, are lost.',
 ];
 export function buildPause(ctx) {
   const E = ctx.events;
@@ -194,7 +194,7 @@ export function buildVictory(ctx) {
   const root = el('div', 'victory');
   root.appendChild(el('div', 'veil'));
   const c = el('div', 'c', `<div class="k">Humanity's first victory</div><h2>The Titan<br>Falls</h2>
-    <p>Shiganshina still burns and the breach still gapes — but the smiling giant is dead, and the people in the boats will remember who held the wall.</p><div class="grid"></div>`);
+    <p>The breach in Wall Maria still gapes — but the Colossal Titan has fallen, and the people in the boats will remember who held the wall.</p><div class="grid"></div>`);
   const acts = el('div', 'acts');
   const bCont = el('button', 'btn ia sel', 'Play again');
   const bTitle = el('button', 'btn ia', 'Return to title');

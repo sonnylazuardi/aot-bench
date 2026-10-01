@@ -130,6 +130,37 @@ function geoBench() {
   for (const x of [-0.75, 0.75]) gb.box(x - 0.05, 0, -0.18, x + 0.05, 0.42, 0.18, 1 | 2 | 16 | 32);
   return gb.build();
 }
+function geoHandcart() {
+  const gb = new GB(300);
+  gb.set({ mat: 2, col: lin(0x7a5a3a) });
+  gb.box(-0.55, 0.5, -0.7, 0.55, 0.58, 0.7);
+  for (const s of [-1, 1]) gb.box(s * 0.55 - 0.03, 0.58, -0.7, s * 0.55 + 0.03, 0.85, 0.7, 63);
+  for (const s of [-1, 1]) gb.box(s * 0.4 - 0.03, 0.62, 0.7, s * 0.4 + 0.03, 0.68, 1.7, 63);
+  gb.set({ col: lin(0x4a3322) });
+  for (const s of [-1, 1]) {
+    const pts = []; for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2; pts.push([s * 0.62, 0.42 + Math.sin(a) * 0.42, -0.1 + Math.cos(a) * 0.42]); }
+    gb.poly(s > 0 ? pts.slice().reverse() : pts);
+  }
+  gb.set({ mat: 8, col: lin(0xa89068) });
+  gb.obox(0.1, 0.72, -0.2, 0.3, 0.16, 0.25, rot3(0.3, 0, 0));
+  gb.obox(-0.2, 0.7, 0.25, 0.28, 0.14, 0.22, rot3(-0.4, 0, 0));
+  return gb.build();
+}
+function geoRubbleHeap() {
+  const gb = new GB(600);
+  const r = new Rng(505);
+  gb.set({ mat: 4, p2: 0.4, col: lin(0xa89c86) });
+  for (let i = 0; i < 9; i++) {
+    const s = r.range(0.35, 1.0);
+    gb.obox(r.range(-1.6, 1.6), s * 0.5 + r.range(0, 0.4), r.range(-1.3, 1.3), s * r.range(0.7, 1.3), s * r.range(0.4, 0.7), s * r.range(0.6, 1.2), rot3(r.range(0, 6.28), r.range(-0.4, 0.4), r.range(-0.4, 0.4)));
+  }
+  gb.set({ mat: 2, col: lin(0x3a2416) });
+  for (let i = 0; i < 2; i++) gb.obox(r.range(-1, 1), 0.5, r.range(-1, 1), 0.12, 0.13, r.range(1.2, 2.2), rot3(r.range(0, 6.28), r.range(-0.5, 0.5), 0));
+  gb.set({ mat: 6, col: lin(0x6a6258) });
+  gb.poly([[-2.2, 0.02, 1.8], [2.2, 0.02, 1.8], [1.6, 0.45, 0], [-1.6, 0.45, 0]]);
+  gb.poly([[2.2, 0.02, -1.8], [-2.2, 0.02, -1.8], [-1.6, 0.45, 0], [1.6, 0.45, 0]]);
+  return gb.build();
+}
 function geoHay() {
   const gb = new GB(200);
   gb.set({ mat: 8, col: lin(0xb89a58) });
@@ -193,7 +224,7 @@ export function* buildPropsGen(ctx, shared, plan, buildings, solids, out) {
     barrel: { g: geoBarrel(), list: [] }, crate: { g: geoCrate(), list: [] }, cart: { g: geoCart(), list: [] },
     stallA: { g: geoStall(lin(0xb03a2a)), list: [] }, stallB: { g: geoStall(lin(0x2f5a8a)), list: [] }, stallC: { g: geoStall(lin(0xc8b070)), list: [] },
     lamp: { g: geoLamp(), list: [] }, well: { g: geoWell(), list: [] }, sign: { g: geoSign(), list: [] }, hay: { g: geoHay(), list: [] },
-    wood: { g: geoWoodpile(), list: [] }, gas: { g: geoGasTank(), list: [] }, sacks: { g: geoSacks(), list: [] }, bench: { g: geoBench(), list: [] }, fountain: { g: geoFountain(), list: [] }, cannon: { g: geoCannonField(), list: [] },
+    wood: { g: geoWoodpile(), list: [] }, gas: { g: geoGasTank(), list: [] }, sacks: { g: geoSacks(), list: [] }, bench: { g: geoBench(), list: [] }, handcart: { g: geoHandcart(), list: [] }, rubble: { g: geoRubbleHeap(), list: [] }, fountain: { g: geoFountain(), list: [] }, cannon: { g: geoCannonField(), list: [] },
   };
   const free = (x, z, r = 1) => {
     for (let dz = -r; dz <= r; dz += r) for (let dx = -r; dx <= r; dx += r) {
@@ -201,7 +232,7 @@ export function* buildPropsGen(ctx, shared, plan, buildings, solids, out) {
     }
     return true;
   };
-  const BLOB = { barrel: 0.9, crate: 1.2, cart: 3.2, stallA: 3.8, stallB: 3.8, stallC: 3.8, lamp: 0.7, well: 3.2, hay: 1.6, wood: 3.0, gas: 0.9, fountain: 10, cannon: 2.8, sacks: 2.0, bench: 2.2 };
+  const BLOB = { handcart: 2.2, rubble: 4.5, barrel: 0.9, crate: 1.2, cart: 3.2, stallA: 3.8, stallB: 3.8, stallC: 3.8, lamp: 0.7, well: 3.2, hay: 1.6, wood: 3.0, gas: 0.9, fountain: 10, cannon: 2.8, sacks: 2.0, bench: 2.2 };
   const blobs = [];
   const place = (type, x, z, ry, s = 1, col = null, y = 0, tilt = 0) => {
     T[type].list.push({ x, y, z, ry, s, tilt });
@@ -243,6 +274,9 @@ export function* buildPropsGen(ctx, shared, plan, buildings, solids, out) {
             if (t === 'crate' && rng.chance(0.35)) place('crate', ox, oz, rng.range(0, 6.28), 0.85, null, 0.8);
           }
           colBox(x, z, 1.8, 0.5, 1.0, Math.atan2(tz, tx));
+        } else if (roll < 0.66) {
+          place('handcart', x + nx * 0.3, z + nz * 0.3, Math.atan2(tx, tz) + rng.range(-0.8, 0.8), 1, null, 0, rng.chance(0.3) ? 1.1 : 0);
+          place('sacks', x + tx * 1.6 - nx * 0.6, z + tz * 1.6 - nz * 0.6, rng.range(0, 6.28), 0.8);
         } else if (roll < 0.72) {
           place('bench', x + nx * 0.6, z + nz * 0.6, face);
         } else if (roll < 0.8) { place('wood', x + nx * 0.7, z + nz * 0.7, face + Math.PI / 2); }
@@ -252,6 +286,16 @@ export function* buildPropsGen(ctx, shared, plan, buildings, solids, out) {
         }
         s += step;
       }
+    }
+  }
+  // breach debris: rubble heaps and broken timbers thickening towards the gate (shown once the wall is breached)
+  const debrisList = [];
+  for (let z = 240; z < 372; z += rng.range(2, 4.5)) {
+    const k = (z - 240) / 132;
+    const n = rng.chance(0.4 + 0.6 * k) ? 1 + Math.round(k * 2 * rng.next()) : 0;
+    for (let i = 0; i < n; i++) {
+      const x = rng.range(-7.2, 7.2) * (0.4 + 0.6 * rng.next());
+      debrisList.push({ x, y: 0, z: z + rng.range(-1.5, 1.5), ry: rng.range(0, 6.28), s: rng.range(0.6, 1.3) * (0.7 + 0.6 * k) });
     }
   }
   yield;
@@ -282,12 +326,15 @@ export function* buildPropsGen(ctx, shared, plan, buildings, solids, out) {
               if (stack) place('crate', ox, oz, rng.range(0, 6.28), 0.9, null, 0.8);
             }
             colBox(x, z, 1.4, 0.5, 0.6, Math.atan2(tz, tx));
-          } else if (roll < 0.56 && st.w > 6.5) {
+          } else if (roll < 0.52) {
+            place('handcart', x - nx * 0.8, z - nz * 0.8, Math.atan2(tx, tz) + rng.range(-0.6, 0.6), 1, null, 0, rng.chance(0.2) ? 1.1 : 0);
+            colBox(x - nx * 0.8, z - nz * 0.8, 0.7, 0.5, 1.1, Math.atan2(tx, tz));
+          } else if (roll < 0.6 && st.w > 6.5) {
             place('cart', x - nx * 1.5, z - nz * 1.5, Math.atan2(tx, tz) + rng.range(-0.3, 0.3));
             colBox(x - nx * 1.5, z - nz * 1.5, 0.9, 0.8, 1.6, Math.atan2(tx, tz));
           }
         }
-        s += main ? rng.range(10, 18) : rng.range(12, 26);
+        s += main ? rng.range(6, 11) : rng.range(8, 15);
       }
     }
   }
@@ -342,6 +389,16 @@ export function* buildPropsGen(ctx, shared, plan, buildings, solids, out) {
     group.add(im);
   }
   yield;
+  {
+    const im = new THREE.InstancedMesh(T.rubble.g, mat, debrisList.length || 1);
+    debrisList.forEach((it, i) => { q.setFromAxisAngle(Y, it.ry); sc.setScalar(it.s); p.set(it.x, 0, it.z); m4.compose(p, q, sc); im.setMatrixAt(i, m4); });
+    im.count = debrisList.length;
+    im.computeBoundingSphere(); im.castShadow = true; im.receiveShadow = true; im.name = 'breach debris';
+    const show = () => { im.visible = true; };
+    im.visible = !!ctx.world?.breached;
+    ctx.events?.on?.('wall:breached', show);
+    group.add(im);
+  }
   // contact-shadow blobs under every ground prop (one instanced decal, soft radial alpha)
   if (blobs.length) {
     const cv = document.createElement('canvas'); cv.width = cv.height = 64;
@@ -362,13 +419,15 @@ export function* buildPropsGen(ctx, shared, plan, buildings, solids, out) {
   const gb = new GB(20000);
   const cloth = [lin(0xe8e4d8), lin(0xc8b89a), lin(0x9a4a3a), lin(0x4a6a8a), lin(0xd8d0b0), lin(0x6a7a4a)];
   for (const st of plan.streets) {
-    if (st.kind !== 'lane' && st.kind !== 'street') continue;
+    if (st.kind !== 'lane' && st.kind !== 'street' && st.kind !== 'avenue') continue;
     yield;
-    for (let s = rng.range(5, 20); s < st.poly.len - 5; s += rng.range(14, 34)) {
-      if (!rng.chance(0.55)) continue;
+    const av = st.kind === 'avenue';
+    for (let s = rng.range(5, 20); s < st.poly.len - 5; s += av ? rng.range(26, 44) : rng.range(10, 24)) {
+      if (!rng.chance(av ? 0.8 : 0.6)) continue;
+      if (av && Math.abs(st.poly.at(s)[1] - 40) < 45) continue; // keep the plaza open
       const [px, pz, tx, tz] = st.poly.at(s);
       const nx = -tz, nz = tx, hw = st.w / 2 + 0.3;
-      const y = rng.range(5.2, 8.5);
+      const y = av ? rng.range(8.5, 10.5) : rng.range(5.2, 8.5);
       const ax = px - nx * hw, az = pz - nz * hw, bx = px + nx * hw, bz = pz + nz * hw;
       const a = Math.atan2(bz - az, bx - ax);
       // rope with sag

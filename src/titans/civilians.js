@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 
 const MAX = 160;
+const SHADOW_PARTS = new Set(['torso', 'skirt', 'pelvis', 'thigh', 'shin']);
 const clamp = THREE.MathUtils.clamp;
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (a) => a[(Math.random() * a.length) | 0];
@@ -103,7 +104,7 @@ export function createCivilians(ctx) {
   for (const [name, n, m] of DEF) {
     const im = new THREE.InstancedMesh(parts[name], m || mat, MAX * n);
     im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false;
+    im.castShadow = SHADOW_PARTS.has(name); im.receiveShadow = true; im.frustumCulled = false;
     im.count = 0;
     for (let i = 0; i < MAX * n; i++) im.setColorAt(i, col('#ffffff'));
     IM[name] = im;
@@ -118,25 +119,40 @@ export function createCivilians(ctx) {
   const ground = (x, z) => ctx.world?.groundHeight?.(x, z) ?? 0;
   const L = ctx.LAYOUT;
 
-  // ---- building index for cheap avoidance ----
-  let bIndex = null, bCount = -1;
+  // ---- building index for cheap avoidance (built incrementally as the town streams in) ----
+  const bIndex = new Map();
+  let bIndexed = 0, bArr = null;
   const CELL = 24;
-  function buildingsNear(x, z) {
+  const EMPTY = [];
+  function syncIndex() {
     const bs = ctx.world?.buildings;
-    if (!bs || !bs.length) return null;
-    if (!bIndex || bCount !== bs.length) {
-      bIndex = new Map(); bCount = bs.length;
-      for (const b of bs) {
-        if (!b.box) continue;
-        const x0 = Math.floor(b.box.min.x / CELL), x1 = Math.floor(b.box.max.x / CELL), z0 = Math.floor(b.box.min.z / CELL), z1 = Math.floor(b.box.max.z / CELL);
-        for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
-          const k = i * 10007 + j;
-          if (!bIndex.has(k)) bIndex.set(k, []);
-          bIndex.get(k).push(b);
-        }
+    if (!bs) return false;
+    if (bs !== bArr || bs.length < bIndexed) { bIndex.clear(); bIndexed = 0; bArr = bs; }
+    for (; bIndexed < bs.length; bIndexed++) {
+      const b = bs[bIndexed];
+      if (!b || !b.box) continue;
+      const x0 = Math.floor(b.box.min.x / CELL), x1 = Math.floor(b.box.max.x / CELL), z0 = Math.floor(b.box.min.z / CELL), z1 = Math.floor(b.box.max.z / CELL);
+      for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
+        const k = i * 10007 + j;
+        let l = bIndex.get(k); if (!l) { l = []; bIndex.set(k, l); }
+        l.push(b);
       }
     }
-    return bIndex.get(Math.floor(x / CELL) * 10007 + Math.floor(z / CELL)) || null;
+    return bIndexed > 0;
+  }
+  function buildingsNear(x, z) {
+    return bIndex.get(Math.floor(x / CELL) * 10007 + Math.floor(z / CELL)) || EMPTY;
+  }
+  // unique buildings whose cells overlap the square [x±r, z±r] (no allocation: fills `out`)
+  let qStamp = 1;
+  function buildingsIn(x, z, r, out) {
+    out.length = 0; qStamp++;
+    const x0 = Math.floor((x - r) / CELL), x1 = Math.floor((x + r) / CELL), z0 = Math.floor((z - r) / CELL), z1 = Math.floor((z + r) / CELL);
+    for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
+      const l = bIndex.get(i * 10007 + j); if (!l) continue;
+      for (const b of l) if (b._qs !== qStamp) { b._qs = qStamp; out.push(b); }
+    }
+    return out;
   }
 
   function dress(c) {
@@ -195,6 +211,7 @@ export function createCivilians(ctx) {
 
   // spawnCrowd(count, area): area = {center:Vector3, radius} | {min:Vector3, max:Vector3}; opts.roofFrac
   function spawnCrowd(count = 60, area = null, opts = {}) {
+    syncIndex();
     const center = area?.center || new THREE.Vector3(0, 0, 300);
     const radius = area?.radius ?? 70;
     const roofFrac = opts.roofFrac ?? 0.12;
@@ -226,8 +243,8 @@ export function createCivilians(ctx) {
 
   function insideBuilding(x, z, pad = 0) {
     const bl = buildingsNear(x, z);
-    if (!bl) return null;
-    for (const b of bl) {
+    for (let i = 0; i < bl.length; i++) {
+      const b = bl[i];
       if (b.destroyed) continue;
       if (x > b.box.min.x - pad && x < b.box.max.x + pad && z > b.box.min.z - pad && z < b.box.max.z + pad) return b;
     }
@@ -282,14 +299,13 @@ export function createCivilians(ctx) {
   }
 
   // ---------------------------------------------------------------- simulation
-  const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _gp = new THREE.Vector3();
+  const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _gp = new THREE.Vector3(), _gpos = new THREE.Vector3();
   function giantPos() {
     const G = ctx.colossal;
     if (G && G.active && G.object) return G.object.getWorldPosition ? G.object.getWorldPosition(_gp) : G.object.position;
     return null;
   }
-  function steer(c, dt) {
-    const G = giantPos();
+  function steer(c, dt, G) {
     const p = c.position;
     // flee: away from the giant, generally north toward the inner gate, drifting to the avenue
     c.goalT -= dt;
@@ -422,8 +438,12 @@ export function createCivilians(ctx) {
     c.object.position.copy(c.position);
   }
 
+  const _cam = new THREE.Vector3();
   function update(dt, time) {
-    const G = giantPos();
+    syncIndex();
+    const G0 = giantPos();
+    const G = G0 ? _gpos.copy(G0) : null;
+    ctx.camera.getWorldPosition(_cam);
     let maxIdx = 0;
     for (const c of list) {
       c.t += dt;
@@ -451,7 +471,7 @@ export function createCivilians(ctx) {
         c.waveK = THREE.MathUtils.damp(c.waveK, c.point ? 0.5 : 0, 4, dt);
         if (c.t > c.lookFor) { c.state = 'flee'; c.goalT = 0; c.waveK = 0; }
       } else if (c.state === 'flee') {
-        steer(c, dt);
+        steer(c, dt, G);
         c.phase += dt * (c.speed / (1.9 * c.scale));
         c.cowerK = THREE.MathUtils.damp(c.cowerK, 0, 6, dt);
         // freeze in terror sometimes when the giant is close
@@ -485,7 +505,9 @@ export function createCivilians(ctx) {
         const near = !G || c.position.distanceTo(G) < 120 || c.state === 'grabbed';
         if (near && Math.random() < (c.state === 'grabbed' ? 1 : 0.35)) ctx.audio?.play?.('scream', { position: c.position, volume: c.state === 'grabbed' ? 1 : 0.5, rate: c.female || c.kid ? rnd(1.05, 1.35) : rnd(0.8, 1.05) });
       }
-      pose(c, time);
+      // far away (>150 m): pose at ~15 Hz, staggered
+      c.poseAcc = (c.poseAcc || (c.slot % 4) / 60) + dt;
+      if (c.state === 'grabbed' || c.poseAcc >= 1 / 15 || c.position.distanceToSquared(_cam) < 150 * 150) { pose(c, time); c.poseAcc = 0; }
       maxIdx = Math.max(maxIdx, c.slot + 1);
     }
     for (const [name, n] of DEF) { IM[name].count = Math.max(IM[name].count, maxIdx * n); IM[name].instanceMatrix.needsUpdate = true; }
@@ -499,5 +521,5 @@ export function createCivilians(ctx) {
     for (const c of list) if (c.alive && (c.state === 'calm' || c.state === 'look' || c.state === 'cower')) { c.state = 'flee'; c.goalT = 0; c.speed = rnd(1, 3); c.waveK = 0; }
   }
   function clear() { for (const c of list.slice()) { hide(c); c.alive = false; slots.push(c.slot); } list.length = 0; }
-  return { list, group, spawnCrowd, spawn: spawnOne, nearest, pickUp, release, eaten, crush, update, kill, look, panic, clear };
+  return { list, group, buildingsIn, spawnCrowd, spawn: spawnOne, nearest, pickUp, release, eaten, crush, update, kill, look, panic, clear };
 }

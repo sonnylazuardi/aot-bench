@@ -1,4 +1,5 @@
-// The giant's anatomy: a SMILING PURE TITAN. Skeleton + ordered SDF primitive list, sculpted as a 1.8 m
+// The giant's anatomy: the COLOSSAL TITAN (skinless striated muscle, pale fascia plates on the skull, lipless jaw).
+// (history: previously a smiling pure titan) Skeleton + ordered SDF primitive list, sculpted as a 1.8 m
 // human (model units, +Y up, facing +Z, +X = its left) and scaled up by the rig.
 // Soft skin-covered body, oversized head with an enormous clenched rictus grin, squinting crescent eyes,
 // crow's-feet, deep nasolabial folds, big nose, and shoulder-length hair parted in the middle (separate part).
@@ -13,7 +14,7 @@ const norm = (a) => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / 
 const mx = (p) => [-p[0], p[1], p[2]];
 
 // head is oversized around the neck joint (uncanny pure-titan proportions)
-export const HS = 1.14;
+export const HS = 1.08;
 export const HEAD_C = [0, 1.755, 0.004];
 export const EYE_X = 0.038;
 export const HAIR_HEM = -0.172;   // head-local y of the blunt shoulder-length hem
@@ -22,7 +23,7 @@ const R = (r) => r * HS;
 
 const A = 38 * Math.PI / 180;
 export const ARM = {
-  shoulder: [0.18, 1.44, -0.008], dir: [Math.sin(A), -Math.cos(A), 0], upper: 0.335, fore: 0.305,
+  shoulder: [0.215, 1.445, -0.008], dir: [Math.sin(A), -Math.cos(A), 0], upper: 0.35, fore: 0.32,
   dorsal: [Math.cos(A), Math.sin(A), 0], thumb: [0, 0, 1],
 };
 ARM.elbow = add(ARM.shoulder, mul(ARM.dir, ARM.upper));
@@ -86,54 +87,56 @@ export function buildSkeletonDefs() {
   return { bones, index };
 }
 
-// mouth geometry (head-local, unscaled): the grin follows the dental arch; corners pulled up and back
+// mouth geometry (head-local, unscaled): lipless, a straight clenched bite line running back toward the jaw hinge
 export const MOUTH = {
-  y: (u) => -0.101 + 0.03 * Math.pow(Math.abs(u), 1.6),          // lip-line centre height along the grin
-  hh: (u) => 0.0215 * (1 - 0.86 * Math.pow(Math.abs(u), 2.2)),     // half opening
-  x: (u) => 0.066 * Math.sin(u * 1.2) / Math.sin(1.2),
-  z: (u) => 0.066 + 0.056 * Math.cos(u * 1.25),
+  y: (u) => -0.097 + 0.008 * u * u,
+  hh: (u) => 0.0125 * (1 - 0.3 * Math.pow(Math.abs(u), 2)),
+  x: (u) => 0.07 * Math.sin(u * 1.35) / Math.sin(1.35),
+  z: (u) => 0.062 + 0.058 * Math.cos(u * 1.3),
 };
 
 export function sculptColossal(bi) {
   const S = new Sculpt();
-  // ===== torso: soft, mildly defined =====
-  S.ell([0, 0.95, -0.005], [0.152, 0.098, 0.1], { bone: bi.root, k: 0.05 });
-  for (const s of [1, -1]) S.ell([0.074 * s, 0.9, -0.056], [0.084, 0.09, 0.072], { bone: bi.root, k: 0.04, fib: [s * 0.6, -1, 0] });
-  S.ell([0, 1.075, 0.01], [0.124, 0.135, 0.09], { bone: bi.spine, k: 0.05 });            // soft belly
-  S.ell([0, 1.3, -0.004], [0.144, 0.176, 0.1], { bone: bi.chest, k: 0.05 });
-  S.ell([0, 1.4, -0.068], [0.1, 0.12, 0.04], { bone: bi.chest, k: 0.04 });
+  // ===== torso: shredded, skinless; pale fascia on the sternum, linea alba and clavicles =====
+  const T = 1;
+  S.ell([0, 0.95, -0.005], [0.15, 0.096, 0.098], { bone: bi.root, k: 0.04 });
+  for (const s of [1, -1]) S.ell([0.074 * s, 0.9, -0.056], [0.084, 0.09, 0.072], { bone: bi.root, k: 0.03, fib: [s * 0.6, -1, 0] });
+  S.ell([0, 1.075, 0.004], [0.118, 0.13, 0.082], { bone: bi.spine, k: 0.04 });
+  S.ell([0, 1.3, 0.004], [0.162, 0.18, 0.125], { bone: bi.chest, k: 0.04 });
+  S.ell([0, 1.405, -0.08], [0.12, 0.12, 0.05], { bone: bi.chest, k: 0.03, fib: [0, 1, 0] });
   for (const s of [1, -1]) {
-    // pectorals: two soft but firm masses (sternal head + clavicular head) with a readable lower edge
-    S.ell([0.068 * s, 1.346, 0.073], [0.078, 0.056, 0.037], { bone: bi.chest, k: 0.02, dir: [s, -0.12, 0.1], hint: [0, 0, 1], fib: [s, 0.3, 0] });
-    S.ell([0.075 * s, 1.4, 0.054], [0.064, 0.03, 0.026], { bone: bi.chest, k: 0.028, dir: [s, 0.15, 0], hint: [0, 0, 1], fib: [s, 0.1, 0] });
+    // big pectorals, fibres fanning from the sternum to the arm
+    S.ell([0.078 * s, 1.35, 0.096], [0.095, 0.066, 0.046], { bone: bi.chest, k: 0.016, dir: [s, -0.15, 0.1], hint: [0, 0, 1], fib: [s, 0.25, 0] });
+    S.ell([0.088 * s, 1.405, 0.075], [0.08, 0.036, 0.034], { bone: bi.chest, k: 0.02, dir: [s, 0.15, 0], hint: [0, 0, 1], fib: [s, 0.1, 0] });
     { const ins = add(s > 0 ? ARM.shoulder : mx(ARM.shoulder), [0.02 * s, -0.04, 0.032]), mid = lerp([0.11 * s, 1.37, 0.065], ins, 0.5);
-      S.cone([0.11 * s, 1.37, 0.065], lerp(mid, ins, 0.3), 0.029, 0.022, { k: 0.026, bone: bi.chest }); }
-    S.ell([0.097 * s, 1.26, -0.05], [0.056, 0.14, 0.05], { k: 0.04, bone: bi.chest, dir: [0.45 * s, 1, -0.1] });
-    S.ell([0.102 * s, 1.08, 0.02], [0.045, 0.1, 0.066], { k: 0.04, bone: bi.spine, dir: [-0.35 * s, -1, 0.25] });
-    for (let i = 0; i < 3; i++) S.cap([0.108 * s, 1.235 - i * 0.04, 0.07], [0.136 * s, 1.215 - i * 0.04, 0.012], 0.0055, { k: 0.028, bone: bi.chest }); // faint ribs
-    S.cone([0.028 * s, 1.56, -0.048], [0.16 * s, 1.47, -0.02], 0.022, 0.026, { k: 0.035, bone: bi.chest });                                   // trapezius
+      S.cone([0.12 * s, 1.37, 0.08], lerp(mid, ins, 0.3), 0.036, 0.028, { k: 0.02, bone: bi.chest }); }
+    S.ell([0.115 * s, 1.26, -0.05], [0.068, 0.15, 0.06], { k: 0.03, bone: bi.chest, dir: [0.45 * s, 1, -0.1] });           // lats
+    S.ell([0.104 * s, 1.075, 0.018], [0.044, 0.1, 0.064], { k: 0.025, bone: bi.spine, dir: [-0.35 * s, -1, 0.25] });      // obliques
+    for (let i = 0; i < 4; i++) S.ell([0.126 * s, 1.31 - i * 0.04, 0.043 - i * 0.004], [0.013, 0.021, 0.03], { k: 0.012, bone: bi.chest, dir: [0.3 * s, -0.55, 1], hint: [s, 0, 0] }); // serratus
+    for (let i = 0; i < 3; i++) S.cap([0.104 * s, 1.24 - i * 0.042, 0.078], [0.142 * s, 1.215 - i * 0.042, 0.006], 0.0065, { k: 0.012, bone: bi.chest, tendon: 0.35 }); // ribs
+    S.cone([0.035 * s, 1.62, -0.05], [0.2 * s, 1.48, -0.02], 0.042, 0.04, { k: 0.028, bone: bi.chest });               // huge trapezius rising to the ears
+    S.ell([0.085 * s, 1.5, -0.06], [0.05, 0.12, 0.045], { k: 0.028, bone: bi.chest, dir: [0.8 * s, -0.6, 0] });
   }
-  for (const s of [1, -1]) S.ell([0.066 * s, 1.472, -0.006], [0.044, 0.028, 0.04], { k: 0.03, bone: bi.chest });              // shoulder top
-  // upper thorax / shoulder-girdle mass: fills pec top, shoulder top, trapezius and armpit into one solid
-  for (const s of [1, -1]) S.ell([0.105 * s, 1.425, 0.0], [0.075, 0.05, 0.062], { k: 0.04, bone: bi.chest });
-  for (let r = 0; r < 3; r++) for (const s of [1, -1]) S.ell([0.033 * s, 1.2 - r * 0.068, 0.082 - r * 0.001], [0.03, 0.031, 0.02], { k: 0.03, bone: r === 0 ? bi.chest : bi.spine, fib: [0, 1, 0] });
-  // neck: a slender column (~0.45x head width) the head clearly sits on
-  S.cone([0, 1.43, -0.02], [0, 1.492, -0.022], 0.052, 0.05, { k: 0.03, bone: bi.chest });
-  S.cone([0, 1.492, -0.022], H(0, -0.09, -0.03), 0.05, 0.046, { k: 0.03, bone: bi.neck });
+  for (const s of [1, -1]) S.ell([0.085 * s, 1.478, -0.006], [0.058, 0.034, 0.05], { k: 0.03, bone: bi.chest });
+  for (const s of [1, -1]) S.ell([0.13 * s, 1.425, 0.005], [0.09, 0.058, 0.075], { k: 0.04, bone: bi.chest });
+  // abs: four rows, separated by fascia (linea alba / tendinous intersections)
+  for (let r = 0; r < 4; r++) for (const s of [1, -1]) S.ell([0.035 * s, 1.215 - r * 0.062, 0.081 - r * 0.003], [0.03, 0.028, 0.021], { k: 0.012, bone: r < 1 ? bi.chest : bi.spine, fib: [0, 1, 0] });
+  S.cap([0, 1.245, 0.096], [0, 0.98, 0.09], 0.006, { k: 0.01, bone: bi.spine, tendon: T });                         // linea alba
+  S.cap([0, 1.44, 0.11], [0, 1.27, 0.128], 0.01, { k: 0.012, bone: bi.chest, tendon: T });                        // sternum plate
+  // neck: massive column with huge SCM cords
+  S.cone([0, 1.43, -0.02], [0, 1.492, -0.022], 0.068, 0.064, { k: 0.03, bone: bi.chest });
+  S.cone([0, 1.492, -0.022], H(0, -0.09, -0.03), 0.064, 0.056, { k: 0.03, bone: bi.neck });
   for (const s of [1, -1]) {
-    // sternocleidomastoid straps: from behind the ear into the sternal notch (the neck's V)
-    const top = H(0.054 * s, -0.075, -0.032), bot = [0.017 * s, 1.452, 0.054], mid = lerp(top, bot, 0.55);
-    S.cone(top, mid, 0.0135, 0.0125, { k: 0.013, bone: bi.neck, fib: sub(bot, top) });
-    S.cone(mid, bot, 0.0125, 0.0105, { k: 0.013, bone: bi.chest, fib: sub(bot, top) });
-    // clavicle bars, gently S-curved
-    const c0 = [0.022 * s, 1.452, 0.057], c1 = [0.085 * s, 1.456, 0.05], c2 = [0.156 * s, 1.467, 0.004];
-    S.cone(c0, c1, 0.0105, 0.0112, { k: 0.016, bone: bi.chest });
-    S.cone(c1, c2, 0.0112, 0.0122, { k: 0.016, bone: bi.chest });
+    const top = H(0.058 * s, -0.075, -0.032), bot = [0.02 * s, 1.455, 0.068], mid = lerp(top, bot, 0.55);
+    S.cone(top, mid, 0.022, 0.021, { k: 0.01, bone: bi.neck, fib: sub(bot, top) });
+    S.cone(mid, bot, 0.021, 0.016, { k: 0.01, bone: bi.chest, fib: sub(bot, top) });
+    S.cap(lerp(top, bot, 0.82), bot, 0.006, { k: 0.006, bone: bi.chest, tendon: T });                                  // SCM tendon
+    const c0 = [0.024 * s, 1.455, 0.07], c1 = [0.1 * s, 1.46, 0.062], c2 = [0.19 * s, 1.472, 0.008];
+    S.cone(c0, c1, 0.0105, 0.0112, { k: 0.012, bone: bi.chest, tendon: T });                                           // clavicles (pale)
+    S.cone(c1, c2, 0.0112, 0.0122, { k: 0.012, bone: bi.chest, tendon: T });
   }
-  // hollows: sternal notch, sternum groove between the pecs, above and below the clavicles
-  S.sph([0, 1.461, 0.066], 0.013, { k: 0.016, sub: true });
-  S.cap([0, 1.42, 0.112], [0, 1.3, 0.116], 0.009, { k: 0.022, sub: true });                    // soft sternum dip
-  S.sph([0, 1.03, 0.1], 0.006, { k: 0.01, bone: bi.spine, sub: true });                                                                     // navel
+  S.sph([0, 1.465, 0.08], 0.014, { k: 0.014, sub: true });
+  S.sph([0, 1.03, 0.1], 0.006, { k: 0.01, bone: bi.spine, sub: true });
 
   // ===== arms =====
   for (const side of [1, -1]) {
@@ -141,13 +144,15 @@ export function sculptColossal(bi) {
     const f = (p) => (side > 0 ? p : mx(p));
     const Sh = f(ARM.shoulder), E = f(ARM.elbow), W = f(ARM.wrist), d = f(ARM.dir), D = f(ARM.dorsal);
     const ua = bi['upperArm' + s], fa = bi['foreArm' + s];
-    S.ell(add(add(Sh, mul(d, 0.052)), mul(D, 0.017)), [0.064, 0.096, 0.07], { k: 0.022, bone: ua, dir: d, hint: [0, 0, 1] });           // deltoid cap
-    S.cone(Sh, E, 0.06, 0.046, { k: 0.03, bone: ua });
-    S.ell(add(lerp(Sh, E, 0.55), [0, 0, 0.026]), [0.038, 0.105, 0.037], { k: 0.022, bone: ua, dir: d });                 // biceps
-    S.ell(add(lerp(Sh, E, 0.45), [0, 0, -0.03]), [0.043, 0.125, 0.037], { k: 0.022, bone: ua, dir: d });                 // triceps
-    S.sph(E, 0.04, { k: 0.028, bone: fa });
-    S.cone(E, W, 0.048, 0.031, { k: 0.03, bone: fa });
-    S.ell(add(lerp(E, W, 0.27), add(mul(D, 0.016), [0, 0, 0.011])), [0.034, 0.095, 0.031], { k: 0.024, bone: fa, dir: d });
+    S.ell(add(add(Sh, mul(d, 0.055)), mul(D, 0.024)), [0.088, 0.112, 0.09], { k: 0.022, bone: ua, dir: d, hint: [0, 0, 1] });           // deltoid cap
+    S.cone(Sh, E, 0.078, 0.062, { k: 0.03, bone: ua });
+    S.ell(add(lerp(Sh, E, 0.55), [0, 0, 0.036]), [0.056, 0.11, 0.05], { k: 0.022, bone: ua, dir: d });                 // biceps
+    S.ell(add(lerp(Sh, E, 0.45), [0, 0, -0.04]), [0.06, 0.13, 0.052], { k: 0.022, bone: ua, dir: d });                 // triceps
+    S.sph(E, 0.056, { k: 0.022, bone: fa, tendon: 0.7 });
+    S.cone(E, W, 0.064, 0.04, { k: 0.03, bone: fa });
+    S.ell(add(lerp(E, W, 0.27), add(mul(D, 0.024), [0, 0, 0.016])), [0.05, 0.1, 0.046], { k: 0.018, bone: fa, dir: d });
+    S.ell(add(lerp(E, W, 0.3), [0, 0, -0.026]), [0.045, 0.105, 0.04], { k: 0.018, bone: fa, dir: d });
+    S.cap(lerp(E, W, 0.6), add(W, mul(D, 0.012)), 0.0065, { k: 0.01, bone: fa, tendon: T });
   }
   // ===== hands =====
   for (const side of [1, -1]) {
@@ -197,90 +202,65 @@ export function sculptColossal(bi) {
     }
   }
 
-  // ===== head =====
+  // ===== head: the Colossal — pale skull plates over red muscle =====
   const hb = bi.head, jb = bi.jaw;
   const ho = { part: 'head' };
-  S.ell(H(0, 0.03, -0.016), [R(0.083), R(0.09), R(0.097)], { ...ho, k: R(0.03), bone: hb });            // cranium
-  S.ell(H(0, 0.05, 0.047), [R(0.073), R(0.058), R(0.044)], { ...ho, k: R(0.03), bone: hb });            // forehead
-  S.ell(H(0, -0.035, 0.038), [R(0.081), R(0.072), R(0.066)], { ...ho, k: R(0.03), bone: hb });              // mid-face mass
+  const P = 1;   // pale plate / fascia
+  S.ell(H(0, 0.036, -0.016), [R(0.08), R(0.1), R(0.098)], { ...ho, k: R(0.02), bone: hb, tendon: P, fib: [0, 0, 1] });   // skull dome
+  S.ell(H(0, 0.048, 0.05), [R(0.068), R(0.05), R(0.04)], { ...ho, k: R(0.018), bone: hb, tendon: P });                    // forehead plate
+  S.ell(H(0, -0.04, 0.042), [R(0.074), R(0.07), R(0.064)], { ...ho, k: R(0.022), bone: hb });                              // mid-face (muscle)
   for (const s of [1, -1]) {
-    // heavy brow ridge over deep sockets
-    S.ell(H(0.03 * s, 0.01, 0.087), [R(0.013), R(0.035), R(0.016)], { ...ho, k: R(0.014), bone: hb, dir: [s, -0.18, -0.4 * s * s], hint: [0, 0, 1] });
-    S.ell(H(0.004 * s, 0.014, 0.097), [R(0.012), R(0.012), R(0.012)], { ...ho, k: R(0.012), bone: hb });   // glabella
-    // cheekbones (zygomatic), high under the outer eye
-    S.ell(H(0.063 * s, -0.03, 0.066), [R(0.017), R(0.03), R(0.02)], { ...ho, k: R(0.016), bone: hb, dir: [s, -0.35, -0.2], hint: [0, 0, 1] });
-    // raised cheek apples (the grin shoves them up into the eyes)
-    S.ell(H(0.054 * s, -0.05, 0.078), [R(0.035), R(0.029), R(0.026)], { ...ho, k: R(0.018), bone: hb, flush: 1 });
-    // cheek masses bunched above the mouth corners
-    S.ell(H(0.063 * s, -0.074, 0.08), [R(0.021), R(0.02), R(0.019)], { ...ho, k: R(0.014), bone: hb, flush: 0.5 });
-    // outer cheek pad, lateral to the nasolabial fold
-    S.ell(H(0.066 * s, -0.09, 0.066), [R(0.02), R(0.028), R(0.02)], { ...ho, k: R(0.018), bone: hb, dir: [0.4 * s, -1, 0.3] });
-    S.ell(H(0.071 * s, -0.04, 0.02), [R(0.012), R(0.03), R(0.03)], { ...ho, k: R(0.02), bone: hb });  // cheek side
-    // ears (mostly under the hair)
-    S.ell(H(0.081 * s, -0.012, -0.014), [R(0.01), R(0.026), R(0.016)], { ...ho, k: R(0.012), bone: hb, flush: 0.6 });
-    // jaw line
-    S.cone(H(0.026 * s, -0.132, 0.072), H(0.068 * s, -0.102, -0.012), R(0.018), R(0.017), { ...ho, k: R(0.02), bone: jb });
-    S.cone(H(0.064 * s, -0.106, -0.012), H(0.07 * s, -0.05, -0.018), R(0.015), R(0.012), { ...ho, k: R(0.018), bone: jb });
+    // red muscle bands: temporalis fans and the split frontalis
+    S.ell(H(0.068 * s, 0.004, -0.004), [R(0.02), R(0.054), R(0.052)], { ...ho, k: R(0.012), bone: hb, dir: [0.1 * s, -1, 0.35] });
+    S.ell(H(0.03 * s, 0.062, 0.078), [R(0.022), R(0.032), R(0.011)], { ...ho, k: R(0.008), bone: hb, dir: [0.2 * s, 1, 0.3], hint: [0, 0, 1] });
+    // heavy pale brow ridge
+    S.cone(H(0.004 * s, 0.012, 0.095), H(0.06 * s, 0.004, 0.072), R(0.019), R(0.015), { ...ho, k: R(0.01), bone: hb, tendon: P });
+    // pale cheekbone plates + zygomatic arch
+    S.ell(H(0.052 * s, -0.036, 0.068), [R(0.03), R(0.016), R(0.024)], { ...ho, k: R(0.01), bone: hb, tendon: P, dir: [s, 0.12, -0.55], hint: [0, 1, 0] });
+    S.cone(H(0.066 * s, -0.03, 0.04), H(0.08 * s, -0.022, -0.008), R(0.013), R(0.01), { ...ho, k: R(0.01), bone: hb, tendon: P });
+    // lower orbital rim (pale)
+    // cheek muscles: zygomaticus strands from the cheekbone to the mouth corner, masseter behind
+    S.cap(H(0.034 * s, -0.04, 0.084), H(0.03 * s, -0.072, 0.1), R(0.0085), { ...ho, k: R(0.008), bone: hb });
+    S.cap(H(0.05 * s, -0.04, 0.076), H(0.046 * s, -0.074, 0.088), R(0.0085), { ...ho, k: R(0.008), bone: hb });
+    S.ell(H(0.064 * s, -0.062, 0.022), [R(0.016), R(0.034), R(0.024)], { ...ho, k: R(0.012), bone: hb, dir: [0, -1, 0.25] });
+    S.ell(H(0.064 * s, -0.098, 0.012), [R(0.016), R(0.03), R(0.024)], { ...ho, k: R(0.012), bone: jb, dir: [0, -1, 0.25] });
+    S.ell(H(0.08 * s, -0.012, -0.016), [R(0.01), R(0.024), R(0.015)], { ...ho, k: R(0.01), bone: hb });             // small ears
+    // pale jaw plate: mandible body + ramus
+    S.cone(H(0.026 * s, -0.132, 0.08), H(0.074 * s, -0.106, -0.008), R(0.021), R(0.019), { ...ho, k: R(0.012), bone: jb, tendon: P });
+    S.cone(H(0.074 * s, -0.106, -0.008), H(0.076 * s, -0.048, -0.016), R(0.017), R(0.013), { ...ho, k: R(0.012), bone: jb, tendon: P });
+    // vertical jaw-muscle fibre bands from cheekbone to mandible
+    for (let j = 0; j < 3; j++) S.cap(H((0.066 + j * 0.005) * s, -0.042, 0.05 - j * 0.017), H((0.07 + j * 0.004) * s, -0.098, 0.044 - j * 0.017), R(0.0065), { ...ho, k: R(0.006), bone: j === 0 ? hb : jb, fib: [0, -1, 0] });
   }
-  // big nose
-  S.cone(H(0, -0.004, 0.091), H(0, -0.045, 0.124), R(0.0105), R(0.0145), { ...ho, k: R(0.012), bone: hb });
-  S.sph(H(0, -0.051, 0.122), R(0.0185), { ...ho, k: R(0.012), bone: hb, flush: 0.7 });
-  for (const s of [1, -1]) S.sph(H(0.0185 * s, -0.058, 0.107), R(0.0128), { ...ho, k: R(0.01), bone: hb, flush: 0.4 });
-  // muzzle stretched by the grin: upper (skull) and lower (jaw)
-  S.ell(H(0, -0.083, 0.092), [R(0.066), R(0.024), R(0.042)], { ...ho, k: R(0.018), bone: hb });
-  S.ell(H(0, -0.122, 0.086), [R(0.058), R(0.024), R(0.04)], { ...ho, k: R(0.018), bone: jb });
-  S.ell(H(0, -0.14, 0.08), [R(0.032), R(0.02), R(0.022)], { ...ho, k: R(0.02), bone: jb });                          // chin
-  // gums + teeth sockets (so the carve shows gum, not a hollow)
-  S.ell(H(0, -0.084, 0.07), [R(0.06), R(0.013), R(0.05)], { ...ho, k: R(0.008), bone: hb, gum: 1 });
-  S.ell(H(0, -0.114, 0.068), [R(0.055), R(0.012), R(0.046)], { ...ho, k: R(0.008), bone: jb, gum: 1 });
+  // nose: pale ridge
+  S.cone(H(0, -0.004, 0.091), H(0, -0.046, 0.113), R(0.0095), R(0.0125), { ...ho, k: R(0.01), bone: hb, tendon: 0.85 });
+  for (const s of [1, -1]) S.sph(H(0.0145 * s, -0.052, 0.101), R(0.0105), { ...ho, k: R(0.008), bone: hb });
+  // jaws with gums (no lips) and a pale chin
+  S.ell(H(0, -0.079, 0.066), [R(0.056), R(0.017), R(0.05)], { ...ho, k: R(0.012), bone: hb, gum: 1 });
+  S.ell(H(0, -0.114, 0.063), [R(0.051), R(0.014), R(0.046)], { ...ho, k: R(0.01), bone: jb, gum: 1 });
+  S.ell(H(0, -0.136, 0.078), [R(0.044), R(0.024), R(0.024)], { ...ho, k: R(0.014), bone: jb, tendon: P });
+  S.ell(H(0, -0.094, 0.026), [R(0.03), R(0.011), R(0.042)], { ...ho, k: R(0.01), bone: jb, gum: 1 });                    // tongue bed
   // ---- carve ----
-  // the grin: a wide crescent slot following the dental arch, corners up
-  for (let i = 0; i <= 16; i++) {
+  for (let i = 0; i <= 16; i++) {      // lipless bite slot along the dental arch, back to the molars
     const u = -1 + i / 8;
     const x = MOUTH.x(u), y = MOUTH.y(u), z = MOUTH.z(u) + 0.012, hh = MOUTH.hh(u);
-    S.ell(H(x, y, z), [R(0.009), R(hh), R(0.04)], { ...ho, sub: true, k: R(0.004), dir: [0, 1, 0], hint: [Math.sin(u * 1.2), 0, Math.cos(u * 1.2)] });
+    S.ell(H(x, y, z), [R(0.009), R(hh), R(0.04)], { ...ho, sub: true, k: R(0.004), dir: [0, 1, 0], hint: [Math.sin(u * 1.3), 0, Math.cos(u * 1.3)] });
   }
   for (const s of [1, -1]) {
-    // orbital cavity under the brow, then the squinting lids re-added inside it
-    S.ell(H(EYE_X * s, -0.01, 0.1), [R(0.025), R(0.017), R(0.022)], { ...ho, sub: true, k: R(0.01) });
-    S.ell(H(EYE_X * s, -0.0045, 0.08), [R(0.025), R(0.0115), R(0.0128)], { ...ho, k: R(0.006), bone: hb, dir: [1, -0.1 * s, 0], hint: [0, 0, 1], shade: 0.6 });
-    S.ell(H((EYE_X + 0.002) * s, -0.024, 0.081), [R(0.025), R(0.0115), R(0.0135)], { ...ho, k: R(0.007), bone: hb, dir: [1, 0.22 * s, 0], hint: [0, 0, 1], shade: 0.35 });
-    // eye slits: crescents arching up (happy squint)
-    for (let i = 0; i <= 8; i++) {
-      const u = -1 + i / 4;
-      S.sph(H(EYE_X * s + u * 0.022 * s, -0.0135 + 0.0068 * (1 - u * u) + 0.002 * u, 0.088 - 0.004 * u * u), R(0.0042 * (1 - 0.55 * u * u)), { ...ho, sub: true, k: R(0.0018) });
-    }
-    // lid crease arcing over the squint
-    for (let i = 0; i < 4; i++) { const u0 = -1 + i / 2, u1 = u0 + 0.5; const f = (u) => H(EYE_X * s + u * 0.024 * s, 0.001 + 0.004 * (1 - u * u), 0.09 - 0.005 * u * u); S.cap(f(u0), f(u1), R(0.0017), { ...ho, sub: true, k: R(0.002) }); }
-    // crow's feet: 4 creases fanning from the outer corner
-    for (let i = 0; i < 4; i++) S.cap(H((EYE_X + 0.023) * s, -0.013 + (i - 1.5) * 0.0035, 0.077), H((EYE_X + 0.042) * s, -0.006 + (i - 1.5) * 0.012, 0.05), R(0.003 - Math.abs(i - 1.5) * 0.0003), { ...ho, sub: true, k: R(0.0022) });
-    // deep nasolabial fold + a second smile line
-    const nl = [H(0.029 * s, -0.067, 0.111), H(0.045 * s, -0.081, 0.104), H(0.062 * s, -0.098, 0.089), H(0.072 * s, -0.122, 0.064)];
-    for (let i = 0; i < 3; i++) S.cap(nl[i], nl[i + 1], R(i === 0 ? 0.0036 : 0.0048), { ...ho, sub: true, k: R(0.005) });
-    const nl2 = [H(0.058 * s, -0.058, 0.097), H(0.074 * s, -0.085, 0.078), H(0.08 * s, -0.112, 0.056)];
-    for (let i = 0; i < 2; i++) S.cap(nl2[i], nl2[i + 1], R(0.0026), { ...ho, sub: true, k: R(0.003) });
-    // under-eye bag line
-    S.cap(H((EYE_X - 0.016) * s, -0.032, 0.094), H((EYE_X + 0.014) * s, -0.036, 0.085), R(0.002), { ...ho, sub: true, k: R(0.003) });
-    S.sph(H(0.0085 * s, -0.068, 0.115), R(0.0048), { ...ho, sub: true, k: R(0.004) });                  // nostrils
-    S.sph(H(0.086 * s, -0.012, -0.012), R(0.005), { ...ho, sub: true, k: R(0.004) });                    // ear canal
+    S.ell(H(0.032 * s, -0.014, 0.088), [R(0.024), R(0.019), R(0.032)], { ...ho, sub: true, k: R(0.008) });      // deep sunken sockets
+    S.sph(H(0.009 * s, -0.057, 0.108), R(0.0058), { ...ho, sub: true, k: R(0.004) });                          // nostrils
+    S.ell(H(0.056 * s, -0.096, 0.048), [R(0.012), R(0.02), R(0.03)], { ...ho, sub: true, k: R(0.008) });      // open cheeks (teeth to the hinge)
+    // muscle grooves between the plates
+    S.cap(H(0.052 * s, 0.03, 0.07), H(0.062 * s, -0.012, 0.062), R(0.0028), { ...ho, sub: true, k: R(0.003) });
+    S.cap(H(0.06 * s, -0.045, 0.07), H(0.064 * s, -0.08, 0.058), R(0.0028), { ...ho, sub: true, k: R(0.003) });
   }
-  // forehead lines
-  for (let i = 0; i < 2; i++) S.cap(H(-0.035, 0.035 + i * 0.013, 0.083 - i * 0.004), H(0.035, 0.035 + i * 0.013, 0.083 - i * 0.004), R(0.0014), { ...ho, sub: true, k: R(0.003) });
-  // ---- thin stretched lips around the grin (added after the carve) ----
-  const lipPts = (upper) => {
-    const pts = [];
-    for (let i = 0; i <= 12; i++) {
-      const u = -1 + i / 6;
-      const hh = MOUTH.hh(u);
-      pts.push(H(MOUTH.x(u) * 1.02, MOUTH.y(u) + (upper ? hh + 0.001 : -hh - 0.001), MOUTH.z(u) + 0.01));
-    }
-    return pts;
-  };
-  for (const upper of [true, false]) {
-    const pts = lipPts(upper);
-    for (let i = 0; i < pts.length - 1; i++) {
-      const u = -1 + (i + 0.5) / 6;
-      S.cap(pts[i], pts[i + 1], R(0.0042 * (1 - 0.35 * u * u)), { ...ho, k: R(0.005), bone: upper ? hb : jb, lip: 1 });
+  // cheek strands bridging upper and lower jaw across the open cheeks (split head/jaw so they stretch)
+  for (const s of [1, -1]) {
+    for (let i = 0; i < 4; i++) {
+      const z = 0.064 - i * 0.012, x = (0.05 + i * 0.004) * s;
+      const top = H(x, -0.072 - i * 0.001, z + 0.003), bot = H(x + 0.002 * s, -0.12 + i * 0.002, z - 0.004), mid = lerp(top, bot, 0.5);
+      const r = R(0.0034 - i * 0.0002);
+      S.cap(top, mid, r, { ...ho, k: R(0.004), bone: hb, fib: sub(bot, top) });
+      S.cap(mid, bot, r, { ...ho, k: R(0.004), bone: jb, fib: sub(bot, top) });
     }
   }
   return { ops: S.ops };
@@ -334,20 +314,20 @@ export function sculptHair(bi) {
 // teeth along the grin: flat human teeth, clenched, following the smile curve
 export function teethLayout() {
   const out = [];
-  const n = 8;
-  const widths = [0.0105, 0.0095, 0.0098, 0.0094, 0.0092, 0.009, 0.0085, 0.008];
+  const n = 11;
+  const widths = [0.0068, 0.0064, 0.0064, 0.0062, 0.0062, 0.006, 0.006, 0.0058, 0.0058, 0.0056, 0.0055];
   for (const upper of [true, false]) {
     for (const s of [1, -1]) {
       let th = 0;
       for (let i = 0; i < n; i++) {
         const w = widths[i] * (upper ? 1 : 0.93);
-        const ax = 0.057, az = 0.05, cz = 0.063;
+        const ax = 0.064, az = 0.056, cz = 0.058;
         const dth = (w * 1.03) / Math.hypot(ax * Math.cos(th), az * Math.sin(th));
         const tc = th + dth * 0.5; th += dth;
         const x = ax * Math.sin(tc) * s, z = cz + az * Math.cos(tc);
         const u = x / 0.066;
         const yc = MOUTH.y(Math.max(-1, Math.min(1, u)));
-        const hgt = (upper ? 0.0175 : 0.0145) * (1 - 0.25 * (i / n));
+        const hgt = (upper ? 0.0112 : 0.0098) * (1 - 0.15 * (i / n));
         const tx = ax * Math.cos(tc) * s, tz = -az * Math.sin(tc), tl = Math.hypot(tx, tz);
         const ox = Math.sin(tc) * s / ax, oz = Math.cos(tc) / az, ol = Math.hypot(ox, oz);
         const yTop = upper ? yc + hgt - 0.0005 : yc - 0.0005;
@@ -358,4 +338,4 @@ export function teethLayout() {
   return out;
 }
 
-export const EYES = [{ c: H(EYE_X, -0.013, 0.073), r: R(0.0128) }, { c: H(-EYE_X, -0.013, 0.073), r: R(0.0128) }];
+export const EYES = [{ c: H(0.032, -0.016, 0.064), r: R(0.0062) }, { c: H(-0.032, -0.016, 0.064), r: R(0.0062) }];

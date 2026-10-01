@@ -15,48 +15,49 @@ import { makeImpulse } from './kit.js';
 // max voices · rv rate variance · duck = auto-duck music/amb · shock = shell-shock when close · phys = speed-of-sound delay
 // self = the player's own gear (close-miked 2D, panned by camera-relative direction) · bus amb|ui
 export const MIX = {
-  giant_roar: { g: 1.9, ref: 140, roll: 0.5, send: 0.3, big: 0.55, echo: 0.5, lfe: 0.9, width: 0.25, max: 2, rv: 0.03, duck: 0.6, shock: 1, phys: 1 },
-  giant_step: { g: 1.6, ref: 100, roll: 0.6, send: 0.25, big: 0.4, echo: 0.3, lfe: 1.0, max: 6, rv: 0.05, phys: 1 },
-  giant_giggle: { g: 1.35, ref: 60, roll: 0.7, send: 0.25, big: 0.35, echo: 0.15, lfe: 0.3, max: 2, rv: 0.04 },
-  giant_breath: { g: 1.0, ref: 35, roll: 1, send: 0.2, big: 0.2, lfe: 0.25, max: 1 },
-  giant_groan: { g: 1.35, ref: 70, roll: 0.7, send: 0.25, big: 0.4, echo: 0.2, lfe: 0.5, max: 3, rv: 0.05 },
-  giant_hurt: { g: 1.6, ref: 100, roll: 0.6, send: 0.25, big: 0.5, echo: 0.35, lfe: 0.6, max: 2, rv: 0.04, duck: 0.3 },
-  giant_bite: { g: 1.5, ref: 45, roll: 0.8, send: 0.3, big: 0.35, echo: 0.2, lfe: 0.3, max: 3, rv: 0.05 },
-  giant_grab: { g: 1.3, ref: 45, roll: 0.8, send: 0.25, big: 0.3, lfe: 0.4, max: 3, rv: 0.06 },
-  giant_fall: { g: 1.9, ref: 150, roll: 0.5, send: 0.3, big: 0.6, echo: 0.5, lfe: 1, width: 0.3, max: 1, duck: 0.5, phys: 1 },
-  wall_crush: { g: 1.45, ref: 80, roll: 0.7, send: 0.3, big: 0.5, echo: 0.35, lfe: 0.6, max: 4, rv: 0.08, phys: 1 },
-  steam_jet: { g: 1.1, ref: 55, roll: 0.8, send: 0.25, big: 0.3, lfe: 0.2, max: 4, rv: 0.08 },
-  whoosh: { g: 1.3, ref: 50, roll: 0.8, send: 0.2, big: 0.2, lfe: 0.5, max: 4, rv: 0.1 },
-  wall_break: { g: 2.0, ref: 160, roll: 0.5, send: 0.3, big: 0.7, echo: 0.6, lfe: 1, width: 0.35, max: 2, duck: 0.7, shock: 0.8, phys: 1 },
-  boom: { g: 1.3, ref: 80, roll: 0.7, send: 0.3, big: 0.5, echo: 0.45, lfe: 0.8, max: 4, rv: 0.08, phys: 1 },
-  cannon: { g: 1.0, ref: 80, roll: 0.7, send: 0.3, big: 0.5, echo: 0.6, lfe: 0.4, max: 3, rv: 0.06, phys: 1 },
-  rubble: { g: 1.0, ref: 40, roll: 1, send: 0.4, big: 0.25, echo: 0.15, lfe: 0.4, max: 5, rv: 0.1 },
+  giant_roar: { g: 1.9, ref: 140, roll: 0.5, send: 0.3, big: 0.55, echo: 0.5, lfe: 0.54, width: 0.25, max: 2, rv: 0.03, duck: 0.6, shock: 1, phys: 1 },
+  giant_step: { g: 1.6, ref: 100, roll: 0.6, send: 0.25, big: 0.4, echo: 0.3, lfe: 0.6, max: 6, rv: 0.05, phys: 1 },
+  giant_giggle: { g: 1.35, ref: 60, roll: 0.7, send: 0.25, big: 0.35, echo: 0.15, lfe: 0.18, max: 2, rv: 0.04 },
+  giant_breath: { g: 0.6, ref: 60, roll: 0.8, send: 0.2, big: 0.3, lfe: 0.06, max: 1 },
+  giant_groan: { g: 1.35, ref: 70, roll: 0.7, send: 0.25, big: 0.4, echo: 0.2, lfe: 0.3, max: 3, rv: 0.05 },
+  giant_hurt: { g: 1.6, ref: 100, roll: 0.6, send: 0.25, big: 0.5, echo: 0.35, lfe: 0.36, max: 2, rv: 0.04, duck: 0.3 },
+  giant_bite: { g: 1.5, ref: 45, roll: 0.8, send: 0.3, big: 0.35, echo: 0.2, lfe: 0.18, max: 3, rv: 0.05 },
+  giant_grab: { g: 1.3, ref: 45, roll: 0.8, send: 0.25, big: 0.3, lfe: 0.24, max: 3, rv: 0.06 },
+  giant_fall: { g: 1.9, ref: 150, roll: 0.5, send: 0.3, big: 0.6, echo: 0.5, lfe: 0.6, width: 0.3, max: 1, duck: 0.5, phys: 1 },
+  wall_crush: { g: 1.45, ref: 80, roll: 0.7, send: 0.3, big: 0.5, echo: 0.35, lfe: 0.36, max: 4, rv: 0.08, phys: 1 },
+  steam_blast: { g: 1.7, ref: 90, roll: 0.6, send: 0.25, big: 0.4, echo: 0.35, lfe: 0.18, max: 3, rv: 0.06, duck: 0.35, shock: 0.5 },
+  steam_jet: { g: 1.1, ref: 55, roll: 0.8, send: 0.25, big: 0.3, lfe: 0.12, max: 4, rv: 0.08 },
+  whoosh: { g: 1.3, ref: 50, roll: 0.8, send: 0.2, big: 0.2, lfe: 0.3, max: 4, rv: 0.1 },
+  wall_break: { g: 2.0, ref: 160, roll: 0.5, send: 0.3, big: 0.7, echo: 0.6, lfe: 0.6, width: 0.35, max: 2, duck: 0.7, shock: 0.8, phys: 1 },
+  boom: { g: 1.3, ref: 80, roll: 0.7, send: 0.3, big: 0.5, echo: 0.45, lfe: 0.48, max: 4, rv: 0.08, phys: 1 },
+  cannon: { g: 1.0, ref: 80, roll: 0.7, send: 0.3, big: 0.5, echo: 0.6, lfe: 0.24, max: 3, rv: 0.06, phys: 1 },
+  rubble: { g: 1.0, ref: 40, roll: 1, send: 0.4, big: 0.25, echo: 0.15, lfe: 0.24, max: 5, rv: 0.1 },
   bell: { g: 0.9, ref: 80, roll: 0.8, send: 0.45, big: 0.4, echo: 0.4, max: 3 },
   scream: { g: 0.62, ref: 20, roll: 1, send: 0.45, big: 0.15, echo: 0.15, max: 5, rv: 0.08 },
   crowd: { g: 0.55, ref: 80, roll: 1, send: 0.35, big: 0.2, width: 0.6, max: 2, bus: 'amb' },
   fire: { g: 0.9, ref: 14, roll: 1.1, send: 0.25, max: 10, bus: 'amb' },
-  thunder: { g: 1.3, ref: 200, roll: 0.5, send: 0.3, big: 0.6, echo: 0.3, lfe: 0.6, width: 0.6, max: 2, rv: 0.1 },
-  transform: { g: 1.9, ref: 220, roll: 0.5, send: 0.3, big: 0.6, echo: 0.5, lfe: 1, width: 0.4, max: 1, duck: 0.6, shock: 0.6 },
-  titan_step: { g: 1.2, ref: 34, roll: 0.9, send: 0.35, big: 0.2, lfe: 0.4, max: 10, rv: 0.06 },
+  thunder: { g: 1.3, ref: 200, roll: 0.5, send: 0.3, big: 0.6, echo: 0.3, lfe: 0.36, width: 0.6, max: 2, rv: 0.1 },
+  transform: { g: 1.9, ref: 220, roll: 0.5, send: 0.3, big: 0.6, echo: 0.5, lfe: 0.6, width: 0.4, max: 1, duck: 0.6, shock: 0.6 },
+  titan_step: { g: 1.2, ref: 34, roll: 0.9, send: 0.35, big: 0.2, lfe: 0.24, max: 10, rv: 0.06 },
   titan_roar: { g: 1.2, ref: 45, roll: 0.9, send: 0.4, big: 0.3, echo: 0.2, max: 4, rv: 0.05 },
   titan_groan: { g: 0.9, ref: 25, roll: 1, send: 0.4, big: 0.2, max: 5, rv: 0.08 },
   steam: { g: 0.5, ref: 14, roll: 1, send: 0.25, max: 6, rv: 0.1 },
-  town_calm: { g: 0.45, bus: 'amb', max: 1, send: 0.1 },
-  war_bed: { g: 0.6, bus: 'amb', max: 1, send: 0.1, lfe: 0.3 },
-  hook_fire: { g: 1.05, self: 1, send: 0.12, max: 4, rv: 0.06 },
-  hook_hit_stone: { g: 1.0, ref: 14, roll: 1, send: 0.3, big: 0.1, max: 4, rv: 0.1 },
-  hook_hit_wood: { g: 1.0, ref: 14, roll: 1, send: 0.3, max: 4, rv: 0.1 },
-  hook_hit_flesh: { g: 1.1, ref: 16, roll: 1, send: 0.25, max: 4, rv: 0.1 },
-  reel: { g: 0.45, self: 1, send: 0.05, max: 2, rv: 0.04 },
-  gas: { g: 0.6, self: 1, send: 0.08, max: 3, rv: 0.1 },
+  town_calm: { g: 0.15, bus: 'amb', max: 1, send: 0.1 },
+  war_bed: { g: 0.1, bus: 'amb', max: 1, send: 0.1 },
+  hook_fire: { g: 1.5, self: 1, send: 0.12, max: 4, rv: 0.06 },
+  hook_hit_stone: { g: 1.3, ref: 14, roll: 1, send: 0.3, big: 0.1, max: 4, rv: 0.1 },
+  hook_hit_wood: { g: 1.3, ref: 14, roll: 1, send: 0.3, max: 4, rv: 0.1 },
+  hook_hit_flesh: { g: 1.4, ref: 16, roll: 1, send: 0.25, max: 4, rv: 0.1 },
+  reel: { g: 0.6, self: 1, send: 0.05, max: 2, rv: 0.04 },
+  gas: { g: 0.5, self: 1, send: 0.08, max: 3, rv: 0.1 },
   gas_empty: { g: 0.8, self: 1, send: 0.05, max: 1 },
-  slash: { g: 1.1, self: 1, send: 0.2, max: 4, rv: 0.08 },
-  nape_kill: { g: 1.2, ref: 18, roll: 0.8, send: 0.3, big: 0.2, lfe: 0.5, max: 2, rv: 0.05 },
-  blade_break: { g: 0.95, self: 1, send: 0.2, max: 2 },
-  blade_swap: { g: 0.75, self: 1, send: 0.1, max: 2 },
+  slash: { g: 1.55, self: 1, send: 0.2, max: 4, rv: 0.08 },
+  nape_kill: { g: 1.2, ref: 18, roll: 0.8, send: 0.3, big: 0.2, lfe: 0.3, max: 2, rv: 0.05 },
+  blade_break: { g: 1.3, self: 1, send: 0.2, max: 2 },
+  blade_swap: { g: 1.0, self: 1, send: 0.1, max: 2 },
   grab: { g: 0.9, self: 1, send: 0.2, max: 2 },
   crunch: { g: 1.0, ref: 10, send: 0.25, max: 3, rv: 0.08 },
-  body_hit: { g: 1.1, self: 1, send: 0.1, max: 2, rv: 0.06 },
+  body_hit: { g: 1.4, self: 1, send: 0.1, max: 2, rv: 0.06 },
   heartbeat: { g: 0.8, self: 1, send: 0, max: 1, bus: 'ui' },
   ui_tick: { g: 0.25, bus: 'ui', send: 0.05, max: 3 },
   ui_confirm: { g: 0.8, bus: 'ui', send: 0.4, max: 1 },
@@ -64,7 +65,8 @@ export const MIX = {
 const DEF = { g: 0.8, ref: 15, roll: 1, send: 0.3, max: 6 };
 
 const att = (d, ref, roll) => ref / (ref + roll * (Math.max(d, ref) - ref));
-const airCut = (d) => THREE.MathUtils.clamp(20000 * Math.exp(-d / 150), 500, 20000);
+const airCut = (d) => THREE.MathUtils.clamp(20000 * Math.exp(-d / 420), 1600, 20000); // air absorption (gentle: far things must still read)
+export let MASTER_MAKEUP = 0.45; // NB: Chrome's DynamicsCompressors add their own auto-makeup (~+9 dB across glue/sfx/limiter)
 
 function smoothBuf(ac, rate, secs, seed) {
   let s = seed >>> 0 || 1; const r = () => ((s = (s * 16807) % 2147483647) / 2147483647) * 2 - 1;
@@ -89,25 +91,28 @@ export class Mixer {
   _build(vol) {
     const ac = this.ac, g = {};
     g.out = this._gain(vol); g.out.connect(ac.destination);
-    g.clip = ac.createWaveShaper(); { const n = 2048, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1, a = Math.abs(x); c[i] = Math.sign(x) * (a < 0.82 ? a : 0.82 + 0.16 * Math.tanh((a - 0.82) / 0.16)); } g.clip.curve = c; g.clip.oversample = '2x'; }
+    // soft clip with a -1 dBFS ceiling (4x oversampled: keeps inter-sample peaks under control)
+    g.clip = ac.createWaveShaper(); { const n = 4096, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1, a = Math.abs(x); c[i] = Math.sign(x) * (a < 0.7 ? a : 0.7 + 0.19 * Math.tanh((a - 0.7) / 0.19)); } g.clip.curve = c; g.clip.oversample = '4x'; }
     g.clip.connect(g.out);
-    g.limiter = this._comp(-2.5, 20, 0.001, 0.14, 0); g.limiter.connect(g.clip);
-    g.glue = this._comp(-12, 2.2, 0.015, 0.3, 10); g.glue.connect(g.limiter);
-    g.masterLP = this._filt('lowpass', 20000, 0.5); g.masterLP.connect(g.glue);
+    g.limiter = this._comp(-3, 20, 0.001, 0.12, 0); g.limiter.connect(g.clip);
+    g.makeup = this._gain(MASTER_MAKEUP); g.makeup.connect(g.limiter);       // loudness: ~-15 LUFS in play
+    g.glue = this._comp(-16, 1.8, 0.02, 0.25, 8); g.glue.connect(g.makeup);   // light glue only
+    g.masterHP = this._filt('highpass', 32, 0.7); g.masterHP.connect(g.glue); // no sub mud driving the dynamics
+    g.masterLP = this._filt('lowpass', 20000, 0.5); g.masterLP.connect(g.masterHP);
     g.shockLP = this._filt('lowpass', 20000, 0.6); g.shockLP.connect(g.masterLP);
     g.pre = this._gain(0.8); g.pre.connect(g.shockLP);
     g.ui = this._gain(1); g.ui.connect(g.glue);
     // sfx
-    g.sfxComp = this._comp(-18, 3, 0.005, 0.22, 8); g.sfxComp.connect(g.pre);
+    g.sfxComp = this._comp(-10, 2, 0.004, 0.15, 6); g.sfxComp.connect(g.pre);
     g.sfx = this._gain(1); g.sfx.connect(g.sfxComp);
     // ambience + music (duckable)
-    g.ambDuck = this._gain(1); g.ambDuck.connect(g.pre); g.amb = this._gain(1); g.amb.connect(g.ambDuck);
+    g.ambDuck = this._gain(1); g.amb = this._gain(1); { const ls = this._filt('lowshelf', 80); ls.gain.value = -4; g.ambDuck.connect(ls); ls.connect(g.pre); } g.amb.connect(g.ambDuck);
     g.musicLP = this._filt('lowpass', 20000); g.musicLP.connect(g.pre);
     g.musicDuck = this._gain(1); g.musicDuck.connect(g.musicLP);
-    g.music = this._gain(0.26); g.music.connect(g.musicDuck);
+    g.music = this._gain(0.12); g.music.connect(g.musicDuck);
     // LFE: the ground-shaking sub layer of giant events (non-directional, gentle distance law)
     g.lfe = this._gain(1); const lfeLP = this._filt('lowpass', 110, 0.8), lfeHP = this._filt('highpass', 22, 0.7), lfeC = this._comp(-14, 4, 0.01, 0.4, 6);
-    g.lfe.connect(lfeLP); lfeLP.connect(lfeHP); lfeHP.connect(lfeC); const lfeOut = this._gain(0.75); lfeC.connect(lfeOut); lfeOut.connect(g.pre);
+    g.lfe.connect(lfeLP); lfeLP.connect(lfeHP); lfeHP.connect(lfeC); const lfeOut = this._gain(0.4); lfeC.connect(lfeOut); lfeOut.connect(g.pre);
     // town reverb
     g.verbIn = this._gain(1); { const pd = ac.createDelay(0.2); pd.delayTime.value = 0.015; const hp = this._filt('highpass', 120); g.verb = ac.createConvolver(); g.verb.normalize = true; g.verb.buffer = makeImpulse(ac.sampleRate, 'town'); g.verbOut = this._gain(0.5); g.verbIn.connect(pd); pd.connect(hp); hp.connect(g.verb); g.verb.connect(g.verbOut); g.verbOut.connect(g.pre); }
     // big reverb: the ring wall / valley
@@ -295,7 +300,7 @@ export class Mixer {
     const src = ac.createBufferSource(); src.buffer = buf; src.loop = true; const end = buf._loopEnd || buf.duration; if (buf._loopEnd) { src.loopStart = 0; src.loopEnd = end; }
     src.start(ac.currentTime, Math.random() * end * 0.98);
     const mod = (rate, secs, seed, depth) => { const s = ac.createBufferSource(); s.buffer = smoothBuf(ac, rate, secs, seed); s.loop = true; s.start(); const gg = this._gain(depth); s.connect(gg); return gg; };
-    W.pan = ac.createStereoPanner(); W.out = this._gain(buf._gain ?? 1); W.pan.connect(W.out); W.out.connect(this.g.sfx);
+    W.pan = ac.createStereoPanner(); W.out = this._gain((buf._gain ?? 1) * 0.45); W.pan.connect(W.out); W.out.connect(this.g.sfx);
     const layer = (nodes, amNode) => { const g = this._gain(0); let prev = src; for (const n of nodes) { prev.connect(n); prev = n; } if (amNode) { prev.connect(amNode); prev = amNode; } prev.connect(g); g.connect(W.pan); return g; };
     // gusting amplitude on the low layers
     const gust = this._gain(0.75); mod(0.35, 17, 7, 0.25).connect(gust.gain);
@@ -317,9 +322,9 @@ export class Mixer {
     const W = this.wind || this.buildWind(); if (!W) return;
     const k = THREE.MathUtils.clamp((speed - 6) / 39, 0, 1.25), a = THREE.MathUtils.clamp((alt - 8) / 60, 0, 1);
     const set = (g, v, tc = 0.08) => g.gain.setTargetAtTime(mute ? 0 : v, t, tc);
-    set(W.rumble, 0.05 + 0.07 * a + 0.55 * k, 0.12);
-    set(W.body, 0.42 * Math.pow(k, 1.2));
-    set(W.rush, 0.5 * Math.pow(k, 2.2));
+    set(W.rumble, 0.5 * Math.pow(k, 0.7), 0.12);
+    set(W.body, 0.035 + 0.05 * a + 0.7 * Math.pow(k, 0.7));
+    set(W.rush, 0.75 * Math.pow(k, 2));
     set(W.whis, 0.07 * Math.pow(k, 3));
     set(W.flap, 0.3 * Math.max(0, k - 0.3));
     set(W.buf, 0.7 * Math.max(0, k - 0.4));

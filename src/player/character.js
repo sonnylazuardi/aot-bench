@@ -21,11 +21,12 @@ export const RIG_GLSL = `
 uniform vec3 uSunView; uniform float uRim; uniform float uFill;
 vec3 heroRig(vec3 n, vec3 viewPos, vec3 albedo) {
   vec3 V = normalize(viewPos);                       // toward the camera
-  float fres = pow(1.0 - clamp(abs(dot(n, V)), 0.0, 1.0), 2.0);
+  float edge = 1.0 - clamp(abs(dot(n, V)), 0.0, 1.0);
+  float fres = smoothstep(0.62, 0.97, edge);          // only the silhouette band, not the whole surface
   float back = 0.5 + 1.5 * max(0.0, -dot(V, uSunView)); // blazes when the camera looks into the sun (anime silhouette halo)
   float sunSide = 0.6 + 0.4 * clamp(dot(n, uSunView) + 0.5, 0.0, 1.0);
-  vec3 rim = vec3(1.0, 0.7, 0.42) * fres * back * sunSide * 2.7 * uRim;
-  vec3 fill = albedo * vec3(0.22, 0.25, 0.3) * (0.7 + 0.3 * n.y) * uFill;     // cool fill keeps hues from going black
+  vec3 rim = vec3(1.0, 0.7, 0.42) * fres * back * sunSide * 1.5 * uRim;
+  vec3 fill = albedo * vec3(0.16, 0.18, 0.22) * (0.7 + 0.3 * n.y) * uFill;     // cool fill keeps hues from going black
   return rim + fill;
 }`;
 const PBR = { cloth: [0.86, 0], jacket: [0.6, 0], leather: [0.5, 0], skin: [0.62, 0], hair: [0.7, 0], metal: [0.28, 0.9], darkMetal: [0.36, 0.85], eye: [0.25, 0] };
@@ -392,7 +393,7 @@ float chNoise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = vPbr.x;')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = vPbr.y;');
   };
-  mat.customProgramCacheKey = () => 'aot-soldier-v4';
+  mat.customProgramCacheKey = () => 'aot-soldier-v5';
 
   const bones = [];
   for (const [name, parent, x, y, z] of BONES) {
@@ -440,7 +441,7 @@ float chNoise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + RIG_GLSL)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += heroRig(normal, vViewPosition, diffuseColor.rgb);');
   };
-  bladeMat.customProgramCacheKey = () => 'aot-blade-v1';
+  bladeMat.customProgramCacheKey = () => 'aot-blade-v2';
   const blades = {}, sockets = {};
   for (const [S, sx] of [['L', 1], ['R', -1]]) {
     const hb = bones[BI['hand' + S]];

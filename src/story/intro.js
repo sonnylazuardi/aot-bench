@@ -1,8 +1,8 @@
 // INTRO + FIGHT CINEMATICS (ctx.intro). Owner: TITANS builder.
 //   start(), skip(), playing, playFight(name)  — emits 'intro:done' when the player takes over,
 //   'victory:cinematic-done' after the kill cam.
-// Beats: calm crane over Shiganshina -> lightning strike behind the wall -> the grinning giant rises and grips the wall
-// -> it kicks the gate in (slow-mo, boulders, dust wave) -> it plucks a screaming townsperson and bites -> the town burns,
+// Beats: calm crane over Shiganshina -> lightning strike behind the wall -> the Colossal Titan's skinless face rises over the wall in streaming steam, grips it
+// -> it kicks the gate in (slow-mo, boulders, dust wave) -> a scalding steam blast roars down the street -> the dust settles,
 // camera settles behind the player on a rooftop and eases into gameplay.
 import * as THREE from 'three';
 import { CineCam, Birds, path, ease, nz, V, clamp, lerp } from './cine.js';
@@ -147,9 +147,6 @@ export async function create(ctx) {
     else if (savedExposure !== null) { st.exposure = savedExposure; savedExposure = null; }
   }
 
-  // proxy "hand" for the horror beat when the giant has no eat() API
-  const hand = new THREE.Object3D(); hand.name = 'introHand';
-  ctx.scene.add(hand);
 
   // ------------------------------------------------------------------ shots
   // each: [duration, enter(), cam(u, t, dt)]
@@ -239,15 +236,20 @@ export async function create(ctx) {
       C.target.copy(hp).add(_v.set(0, 2, 0)); C.fov = lerp(40, 34, e); C.hand = 0.3; C.roll = 0.02;
     });
 
-    // 7 — slow push-in on the face: the uncanny grin
-    shot(5.0, () => { lowKey(false); safe(() => G()?.lookAt?.(ctx.camera.position)); }, (u) => {
+    // 7 — THE ICONIC SHOT: extreme low angle from the street, backlit skinless face over the wall, steam streaming off the head
+    shot(5.0, () => {
+      lowKey(false); safe(() => G()?.lookAt?.(ctx.camera.position));
+      S.headSteam = [];
+      for (const sx of [-1, 0, 1]) { const h = safe(() => ctx.fx?.steamJet?.(head(V()).add(V(sx * 5, 4, 8)), V(sx * 0.35, 1, 0.8), 9, 6, {})); if (h) S.headSteam.push({ h, sx }); }
+    }, (u) => {
       const hp = head(_v2);
       const e = ease.inOut(u);
-      C.pos.set(lerp(-6, -3, e), lerp(44, 49, e), lerp(292, 318, e)); C.target.copy(hp).add(_v.set(0, -2.5, 0)); C.fov = lerp(24, 15, e); C.hand = 0.25; C.roll = 0.01;
+      C.pos.set(lerp(-5, -3, e), lerp(3, 6, e), lerp(330, 342, e)); C.target.copy(hp).add(_v.set(0, -3, 0)); C.fov = lerp(30, 22, e); C.hand = 0.22; C.roll = lerp(0.06, 0.02, e);
+      for (const st of S.headSteam || []) if (st.h.position) st.h.position.copy(hp).add(_v.set(st.sx * 5, 4, 8)); // behind and above the head
     });
 
     // 8 — THE BREACH: inside the town at the gate; it kicks the gate in (slow-mo on contact)
-    const kickAt = shot(4.6, () => { shoulderSteam(false); safe(() => G()?.lookAt?.(null)); }, (u) => {
+    const kickAt = shot(4.6, () => { shoulderSteam(false); for (const st of S.headSteam || []) safe(() => st.h.stop?.()); S.headSteam = null; safe(() => G()?.lookAt?.(null)); }, (u) => {
       const e = ease.out(u);
       C.pos.set(lerp(-20, -24, e), lerp(4.5, 5.5, e), lerp(338, 322, e)); C.target.set(0, 18, 385); C.fov = 62; C.hand = 0.4; C.roll = -0.03;
     });
@@ -275,41 +277,25 @@ export async function create(ctx) {
     at(dustAt + 0.9, () => audio('crowd', { volume: 1 }));
     at(dustAt + 1.5, () => audio('scream', { position: V(4, 2, 250), volume: 1 }));
 
-    // 11–14 — HORROR: the giant reaches down, plucks a screaming townsperson from the street and bites.
-    // Uses the giant's own eat action when available (reach 1.3 s, carry 1.1 s, bite at ~3.0 s, chew 2.4 s);
-    // otherwise stages it with a proxy hand.
-    const hAt = shot(1.9, () => setupVictim(), (u) => {
-      const v = S.victim?.position || V(-12, 0, 366);
-      C.pos.set(v.x + 3.6, v.y + 1.0, v.z - 4.2); C.target.set(v.x, v.y + 1.2 + (S.victimUp ? 3 : 0) + u * 1.5, v.z + 1.5); C.fov = 52; C.hand = 0.35; C.roll = 0.05;
-    });
-    at(hAt + 0.2, grabVictim);
-    shot(1.25, null, (u) => {
-      const v = S.victim?.position || hand.position;
+    // 11–13 — THE STEAM BLAST: it exhales scalding steam through the breach; a wall of steam, dust and debris roars down the street
+    const blastAt = shot(2.2, null, (u) => {
       const hp = head(_v2);
-      C.pos.set(v.x + 14, Math.max(2, v.y - 12), v.z - 26); C.target.lerpVectors(v, hp, 0.3); C.fov = 40; C.hand = 0.35; C.roll = -0.05;
+      C.pos.set(-6, 3.2, 300); C.target.lerpVectors(V(0, 14, 380), hp, 0.4); C.fov = 46; C.hand = 0.35 + u * 0.4; C.roll = 0.02;
     });
-    shot(0.55, null, (u) => {
-      const hp = head(_v2);
-      C.pos.set(hp.x + 4, hp.y - 7, hp.z - 44); C.target.copy(hp).add(_v.set(0, -7, 0)); C.fov = 26; C.hand = 0.25; C.roll = 0.02;
+    at(blastAt + 0.6, steamBlast);
+    shot(2.6, null, (u) => {
+      // street level, the blast front rushing at the lens
+      C.pos.set(2.5, 1.8, 262 - u * 4); C.target.set(0, 6, 380); C.fov = 58; C.hand = 0.6 + u * 0.9; C.roll = -0.03;
     });
-    // CUT AWAY at the bite: wide, the blood mist hangs at the mouth
-    const biteAt = shot(1.5, bite, (u) => {
-      const hp = head(_v2);
-      C.pos.set(-44, 30, 298); C.target.copy(hp).add(_v.set(0, -10, 0)); C.fov = 30; C.hand = 0.3 + (1 - u) * 0.4; C.roll = 0;
-    });
-    // the grin, chewing
-    shot(3.0, () => { chew(); }, (u) => {
-      const hp = head(_v2);
-      const e = ease.inOut(u);
-      C.pos.set(lerp(6, 3, e), lerp(hp.y - 16, hp.y - 14, e), lerp(318, 328, e)); C.target.copy(hp).add(_v.set(0, -5, 0)); C.fov = lerp(17, 14, e); C.hand = 0.2; C.roll = -0.01;
+    shot(3.0, null, (u) => {
+      const hp = head(_v2); const e = ease.inOut(u);
+      C.pos.set(lerp(30, 24, e), lerp(30, 34, e), lerp(300, 312, e)); C.target.copy(hp).add(_v.set(0, -10, 0)); C.fov = lerp(30, 24, e); C.hand = 0.3; C.roll = 0;
     });
 
-    // 15 — the district burns
+    // 15 — the dust settles; the sky clears to a bright day for the fight (no fires: the town stays intact)
     shot(3.6, () => {
-      safe(() => ctx.sky?.setMood?.('inferno', 4));
-      for (const p of [V(-26, 0, 300), V(22, 0, 312), V(-8, 0, 276), V(40, 0, 262), V(-44, 0, 338), V(14, 0, 240)]) {
-        const r = roofNear(p.x, p.z, 4, 30); safe(() => ctx.fx?.fire?.(r, rnd(5, 8)));
-      }
+      safe(() => ctx.sky?.setMood?.('day', 4));
+      for (const x of [-10, 6]) safe(() => ctx.fx?.dust?.(V(x, 2, W.radius - 18), 22, { speed: 0.6 }));
     }, (u) => {
       const e = ease.inOut(u);
       C.pos.set(lerp(-80, -66, e), lerp(52, 46, e), lerp(214, 230, e)); C.target.copy(head(_v2)).add(_v.set(0, -22, -30)); C.fov = 50; C.hand = 0.3; C.roll = -0.03;
@@ -318,7 +304,7 @@ export async function create(ctx) {
     // 16 — behind the soldier on the rooftop, easing into the gameplay camera
     shot(4.6, () => {
       const v = safe(vantage); if (v) S.playerSpot.copy(v);
-      placePlayer(); safe(() => ctx.hud?.subtitle?.('Bring down the Titan.', 3));
+      placePlayer(); safe(() => ctx.hud?.subtitle?.('Bring down the Colossal Titan.', 3));
     }, (u) => {
       const P = S.playerSpot;
       const hp = head(_v2);
@@ -377,22 +363,36 @@ export async function create(ctx) {
     C.jolt(1.3);
     safe(() => ctx.fx?.dust?.(V(0, 12, W.radius - 6), 70, { speed: 1.5 }));
     safe(() => ctx.fx?.debris?.(V(0, 15, W.radius), 80, 40, { type: 'wall', size: 2.2, spread: 18 }));
-    // a spray of boulders over the town
-    const targets = [];
-    const bs = (ctx.world?.buildings || []).filter((b) => b.box && !b.destroyed && b.box.max.z < 360 && b.box.min.z > 200 && Math.abs((b.box.min.x + b.box.max.x) / 2) < 90);
-    for (let i = 0; i < 9; i++) {
-      const b = bs.length ? bs[(Math.random() * bs.length) | 0] : null;
-      targets.push(b ? V((b.box.min.x + b.box.max.x) / 2, b.box.max.y, (b.box.min.z + b.box.max.z) / 2) : V(rnd(-60, 60), 0, rnd(220, 340)));
+    // a spray of boulders into the streets (houses stay intact): each lands in open ground with a huge dust burst
+    safe(() => ctx.sky?.setMood?.('day', 8));
+    for (let i = 0; i < 9; i++) throwBoulder(V(rnd(-14, 14), rnd(8, 30), W.radius + rnd(0, 6)), streetPoint(rnd(-40, 40), rnd(230, 345)), rnd(1.8, 3.2), rnd(2.5, 5));
+  }
+  const _near = [];
+  function inHouse(x, z, pad) {
+    const bs = civs()?.buildingsIn ? civs().buildingsIn(x, z, pad + 1, _near) : (ctx.world?.buildings || []);
+    for (const b of bs) if (b.box && x > b.box.min.x - pad && x < b.box.max.x + pad && z > b.box.min.z - pad && z < b.box.max.z + pad) return true;
+    return false;
+  }
+  // nearest open ground (street / square) to (x,z): the avenue x≈0 is always clear
+  function streetPoint(x, z) {
+    for (let k = 0; k < 10; k++) {
+      const px = x * (1 - k / 9), pz = z;
+      if (!inHouse(px, pz, 2.5)) return V(px, ground(px, pz), pz);
     }
-    for (const tg of targets) throwBoulder(V(rnd(-14, 14), rnd(8, 30), W.radius + rnd(0, 6)), tg, rnd(1.8, 3.2), rnd(2.5, 5));
+    return V(rnd(-5, 5), ground(0, z), z);
+  }
+  function boulderDust(p, size) {
+    safe(() => ctx.fx?.dust?.(p.clone().setY(ground(p.x, p.z) + 1), size * 7, { speed: 1.6 }));
+    safe(() => ctx.fx?.debris?.(p.clone().setY(ground(p.x, p.z) + 1), 20, 14, { type: 'stone', size: size * 0.2, spread: size }));
+    audio('rubble', { position: p, volume: 1 });
   }
   function throwBoulder(from, to, T, size) {
     const vel = new THREE.Vector3().subVectors(to, from).divideScalar(T);
     vel.y += 0.5 * 9.8 * T;
-    return safe(() => ctx.fx?.projectile?.({ pos: from, vel, size, onImpact: (p) => { safe(() => ctx.world?.damage?.(p, size * 2.2, 3)); audio('rubble', { position: p, volume: 1 }); } }));
+    return safe(() => ctx.fx?.projectile?.({ pos: from, vel, size, onImpact: (p) => boulderDust(p, size) }));
   }
   function launchTracked() {
-    const tgt = roofNear(-20, 282, 6, 20);
+    const tgt = streetPoint(-4, 284);
     const from = V(6, 30, W.radius + 2);
     const T = 2.4;
     const vel = new THREE.Vector3().subVectors(tgt, from).divideScalar(T); vel.y += 0.5 * 9.8 * T;
@@ -400,8 +400,8 @@ export async function create(ctx) {
     S.boulder = safe(() => ctx.fx?.projectile?.({
       pos: from, vel, size: 5.5, onImpact: (p) => {
         S.boulderHit = p.clone();
-        safe(() => ctx.world?.damage?.(p, 14, 4));
-        audio('boom', { position: p, volume: 1.2 }); audio('rubble', { position: p, volume: 1 });
+        boulderDust(p, 8);
+        audio('boom', { position: p, volume: 1.2 });
         C.jolt(0.9);
       },
     }));
@@ -410,43 +410,16 @@ export async function create(ctx) {
   function dustWave() {
     S.wave = { t: 0, z: W.radius - 5 };
   }
-  function setupVictim() {
-    const C0 = civs();
-    const p = V(-13, 0, W.radius - 16); p.y = ground(p.x, p.z);
-    let v = null;
-    safe(() => { v = C0?.spawn?.(p, { state: 'cower' }); });
-    if (v) { v.state = 'cower'; v.cowerK = 1; v.yaw = Math.PI + 0.4; v.female = true; }
-    S.victim = v; S.victimUp = false;
-    hand.position.copy(p).add(_v.set(0, 1.2, 0));
-    audio('scream', { position: p, volume: 1.2, rate: 1.2 });
-    // the giant looks down at it
-    safe(() => G()?.lookAt?.(p));
-  }
-  function grabVictim() {
-    const v = S.victim;
-    const g = G();
-    S.victimAPI = false;
-    // the giant's public eat(civ, hand) if it exists; otherwise stage it with the proxy hand
-    if (v && g?.active) {
-      if (typeof g.eat === 'function') { try { S.victimAPI = g.eat(v, 'R') !== false; } catch (e) { console.warn('[intro] eat', e); S.victimAPI = false; } }
-    }
-    if (S.victimAPI) { S.victimUp = true; return; }
-    S.lift = { t: 0, from: hand.position.clone(), delay: 1.3 };
-    S.victimUp = true;
-  }
-  function bite() {
-    if (S.victimAPI) return; // the giant bites on its own (blood + crunch)
-    const hp = head(_v2);
-    const mouth = V(hp.x, hp.y - 6, hp.z - 7);
-    if (S.victim) safe(() => civs()?.eaten?.(S.victim));
-    S.lift = null;
-    for (let i = 0; i < 6; i++) safe(() => ctx.fx?.blood?.(mouth.clone().add(V(rnd(-1.5, 1.5), rnd(-1, 1), rnd(-1.5, 1.5))), V(rnd(-1, 1), rnd(-0.2, 0.8), -1).normalize()));
-    audio('crunch', { position: mouth, volume: 1.4 });
-  }
-  function chew() {
-    safe(() => G()?.chew?.());
-    safe(() => G()?.lookAt?.(ctx.camera.position));
-    S.chewT = 0;
+  function steamBlast() {
+    const hp = head(V());
+    const mouth = hp.clone().add(V(0, -6, -8));
+    safe(() => ctx.fx?.steamJet?.(mouth, V(0, -0.45, -1), 40, 2.5, { force: 3.5 }));
+    safe(() => ctx.fx?.roar?.(mouth, 70, { dir: V(0, -0.3, -1) }));
+    audio('steam', { position: mouth, volume: 1.5, rate: 0.8 });
+    audio('titan_roar', { position: mouth, volume: 1.2, rate: 0.7 });
+    ctx.shake(0.9, { duration: 2.2 }); C.jolt(0.9);
+    S.blast = { t: 0, z: W.radius - 4 };
+    safe(() => civs()?.panic?.());
   }
   function placePlayer() {
     const P = S.playerSpot;
@@ -488,12 +461,12 @@ export async function create(ctx) {
     birds.hide();
     S.flash = 0; if (flashEl) flashEl.style.opacity = '0';
     lowKey(false); shoulderSteam(false);
-    S.lift = null;
+    S.blast = null; for (const st of S.headSteam || []) safe(() => st.h.stop?.()); S.headSteam = null;
     if (skipped) {
       safe(() => { const g = G(); if (g && !g.active) (g.show || g.appear)?.call(g); });
       safe(() => { if (!ctx.world?.breached) ctx.world?.breach?.(); });
       safe(() => civs()?.panic?.());
-      safe(() => ctx.sky?.setMood?.('inferno', 2));
+      safe(() => ctx.sky?.setMood?.('day', 2));
       placePlayer();
     }
     safe(() => G()?.lookAt?.(null));
@@ -538,7 +511,7 @@ export async function create(ctx) {
     } else if (name === 'kill') {
       // extreme slow-mo orbit around the soldier at the nape, blood + steam, then the giant falls onto the town
       const nape = (g.nape?.position?.clone?.()) || head(V()).add(V(0, -6, 8));
-      shots.push({ dur: 4.2, enter: () => { ctx.clock.timeScale = 0.12; safe(() => ctx.post?.setSlowmo?.(1)); }, cam: (u) => {
+      shots.push({ dur: 4.2, enter: () => { ctx.clock.timeScale = 0.12; safe(() => ctx.post?.setSlowmo?.(1)); safe(() => ctx.sky?.setMood?.('afternoon', 6)); }, cam: (u) => {
         const c = ctx.player?.position || nape;
         const a = lerp(-1.2, 1.4, ease.inOut(u));
         C.pos.set(c.x + Math.sin(a) * 7, c.y + 2 + u * 1.5, c.z + Math.cos(a) * 7); C.target.copy(c); C.fov = lerp(40, 32, u); C.hand = 0.15;
@@ -556,8 +529,8 @@ export async function create(ctx) {
       at.push([6.5, () => {
         const fall = V(0, 0, W.radius - 45);
         safe(() => ctx.fx?.stomp?.(fall, 120, {}));
-        safe(() => ctx.fx?.eruption?.(fall.clone().setY(20), 80, {}));
-        safe(() => ctx.world?.damage?.(fall.clone().setY(10), 45, 5));
+        safe(() => ctx.fx?.eruption?.(fall.clone().setY(20), 120, { count: 160 }));
+        for (const dx of [-30, 0, 30]) safe(() => ctx.fx?.steam?.(V(dx, 10, fall.z + rnd(-15, 15)), 50, 12, { intensity: 2 }));
         safe(() => civs()?.crush?.(fall, 40));
         ctx.shake(1.5, { duration: 2.5 }); C.jolt(1.5);
         audio('boom', { position: fall, volume: 1.5, rate: 0.6 }); audio('rubble', { position: fall, volume: 1.2 });
@@ -643,24 +616,16 @@ export async function create(ctx) {
       }
       if (w.z < 240) { S.wave = null; domFlash(0.45, '190,168,132'); }
     }
-    // victim lift (fallback staging)
-    if (S.lift) {
-      S.lift.t += rdt;
-      if (S.lift.delay > 0) {
-        if (S.lift.t < S.lift.delay) return void runShots(rdt);
-        S.lift.delay = 0; S.lift.t = 0;
-        if (S.victim) safe(() => civs()?.pickUp?.(S.victim, hand));
-        ctx.shake(0.6, { at: hand.position, radius: 200 }); C.jolt(0.7);
-        safe(() => ctx.fx?.dust?.(hand.position.clone(), 16, {}));
-        audio('grab', { position: hand.position, volume: 1.2 });
+    // the steam-blast front rolling down the avenue
+    if (S.blast) {
+      const b = S.blast; b.t += rdt; b.acc = (b.acc || 0) + rdt;
+      while (b.acc > 0.08) {
+        b.acc -= 0.08; b.z -= 6.5;
+        safe(() => ctx.fx?.steam?.(V(rnd(-8, 8), 4, b.z), rnd(14, 20), 1.6, { burst: true }));
+        safe(() => ctx.fx?.dust?.(V(rnd(-12, 12), 1, b.z), rnd(18, 26), { speed: 1.8 }));
+        if (Math.random() < 0.4) safe(() => ctx.fx?.debris?.(V(rnd(-8, 8), 2, b.z), 8, 16, { type: 'stone', size: 0.6, spread: 6 }));
       }
-      const hp = head(_v2);
-      const mouth = _v3.set(hp.x, hp.y - 6, hp.z - 9);
-      const k = ease.inOut(S.lift.t / 2.1);
-      const kk = ease.out(Math.min(1, S.lift.t / 0.35));
-      hand.position.copy(S.lift.from).lerp(mouth, k);
-      hand.position.y += kk * 6 * (1 - k);
-      hand.updateMatrixWorld();
+      if (b.z < 250) { S.blast = null; domFlash(0.35, '235,235,230'); }
     }
     runShots(rdt);
   }

@@ -43,6 +43,8 @@ function createJobs(budgetFn) {
   const kick = () => { if (!scheduled && q.length) { scheduled = true; ch.port2.postMessage(0); } };
   return {
     add(name, it) { return new Promise((resolve) => { q.push({ name, it, resolve }); kick(); }); },
+    // run everything now, synchronously (chained jobs are added in promise callbacks: callers await between drains)
+    drain() { runFor(1e9); },
     step(ms) { if (q.length) runFor(ms); },
     get pending() { return q.length; },
     get cpuMs() { return total; },
@@ -116,6 +118,9 @@ export async function create(ctx) {
     m.customDepthMaterial = shared.depthMat;
     townGroup.add(m);
   }
+  // ground floor + its town map first (the streets are the most visible thing from ODM height)
+  const ground = buildGround(ctx, shared, plan, solids);
+  const mapDone = jobs.add('town map', ground.mapJob());
   const SYNC_R = 175; // chunks around the gate / hero area built before create() returns
   const townDone = [];
   for (const { k, d } of chunkOrder) {
@@ -129,7 +134,6 @@ export async function create(ctx) {
   T('wall');
 
   // ---------------- ground: town floor now, maps / terrain / mountains sliced ----------------
-  const ground = buildGround(ctx, shared, plan, solids);
   const groundDone = jobs.add('ground', ground.jobs());
   const fieldDone = groundDone.then(() => jobs.add('terrain field', terrainFieldJob()));
   T('ground floor');
@@ -139,7 +143,7 @@ export async function create(ctx) {
   const trees = { group: null };
   const propsDone = Promise.all(townDone).then(() => jobs.add('props', buildPropsGen(ctx, shared, plan, buildings, solids, props)));
   const treesDone = groundDone.then(() => jobs.add('trees', buildTreesGen(ctx, shared, shared.foliageMat, plan, ground.land, solids, trees)));
-  const allDone = Promise.all([propsDone, treesDone, groundDone, fieldDone, ...townDone]).then(() => {
+  const allDone = Promise.all([mapDone, propsDone, treesDone, groundDone, fieldDone, ...townDone]).then(() => {
     warm.removeFromParent();
     console.log(`[world] all content ready at ${(performance.now() - t0).toFixed(0)} ms (sliced cpu ${jobs.cpuMs.toFixed(0)} ms)`);
     ctx.events?.emit('world:ready', ctx.world);
@@ -328,7 +332,8 @@ export async function create(ctx) {
   });
 
   // ---------------- damage ----------------
-  const W = { solids, buildings, shared, wall, groundHeightBase, buildMound };
+  // houses never collapse (user direction); the wall still breaks. Flip to false to re-enable collapses/ruins.
+  const W = { solids, buildings, shared, wall, groundHeightBase, buildMound, housesIndestructible: true };
   const dmg = createDamage(ctx, W);
 
   // sky colours for the fake glass reflections
@@ -398,5 +403,11 @@ export async function create(ctx) {
   LAYOUT.playerStart.y = groundHeight(LAYOUT.playerStart.x, LAYOUT.playerStart.z);
   T('done');
   if (ctx.params?.breach) setTimeout(() => world.breach(), 0);
+  // headless screenshots: build everything before returning so shots are complete (?lazy=1 keeps the slicing).
+  // Must stay after every const / function the job generators reach (temporal dead zone).
+  if (ctx.params?.shot && !ctx.params?.lazy) {
+    for (let k = 0; k < 10; k++) { jobs.drain(); await new Promise((r) => setTimeout(r, 0)); if (!jobs.pending && k > 2) break; }
+    T('shot mode: all content built');
+  }
   return world;
 }

@@ -1,6 +1,6 @@
 {
  "percent": 92,
- "phase": "ACCELERATED gauntlet: 3 critics \u00d7 2 pieces, 3 screenshot slots, snapshot published after every fix",
+ "phase": "USER FEEDBACK round: epic blue day \u2192 golden \u2192 pink afternoon sky, no fires, houses stay intact",
  "pieces": {
   "render": {
    "status": "built",
@@ -33,8 +33,8 @@
    "note": "Feature-complete: cinematic title over live town, boss bar, weak-point markers, gauges, radar, pause/death/victory, director flow title\u2192intro\u2192fight\u2192victory, resupply crates, fires + bells, ambient titans. Audio rebuilt: 53 procedural sounds, HRTF spatial, wall echo, giant giggle/bite/roar, dynamic score with BRAAM escalations; create() 29 ms."
   },
   "critic": {
-   "status": "critic",
-   "note": "Critic 1: giant + intro \u00b7 Critic 2: world + render \u00b7 Critic 3: player + HUD. Blind A/B, one gap per round, re-judge as soon as files change."
+   "status": "queued",
+   "note": "Stopped by the user \u2014 user feedback first."
   },
   "game": {
    "status": "built",
@@ -173,6 +173,14 @@
   {
    "t": "20:30",
    "m": "Force-published to :4173: giant steam/torso/eyes fixes, inferno smoke banks, soldier colour separation + rim light, intro reveal synced."
+  },
+  {
+   "t": "21:05",
+   "m": "User: stop all critics, feedback first. Critics stopped, builders hold after current fix, auto-publish paused; :4173 frozen on 331a67f."
+  },
+  {
+   "t": "21:18",
+   "m": "User feedback: no fire/burning in battle; epic blue sky with white cumulus turning into a pink-peach afternoon (refs saved); buildings must not be crushed. Render, world, giant, director and intro builders implementing; auto-publish resumes as fixes land."
   }
  ]
 }

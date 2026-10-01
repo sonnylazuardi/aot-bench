@@ -23,8 +23,8 @@ const VICTORY_PATH = {
 };
 const PHASE_BANNERS = {
   1: ['Phase I', 'Bring Down the Titan', 'Sever the tendons in its hands and ankles to bring it to its knees — then cut the nape.'],
-  2: ['Phase II', "It's Inside the Walls", 'It has broken into the district. Keep it away from the fleeing crowds.'],
-  3: ['Phase III', 'Berserk', 'Its skin boils with steam. Strike the nape before it tears Shiganshina apart.'],
+  2: ['Phase II', "It's Inside the Walls", 'It has broken into the district. Keep it away from the fleeing townspeople.'],
+  3: ['Phase III', 'Boiling Point', 'It vents scalding steam. Strike the nape between blasts.'],
 };
 
 export async function create(ctx) {
@@ -102,9 +102,10 @@ export async function create(ctx) {
     ctx.mode = 'play'; ctx.cameraOwner = 'player';
     if (skipped) placeAtVantage(V(-18, 0, 262));
     E.emit('fight:start', { skipped });
+    try { const ph0 = C()?.phase | 0; ctx.sky?.setMood?.(ph0 >= 3 ? 'afternoon' : ph0 === 2 ? 'golden' : 'day'); } catch (e) { console.warn(e); }
     ctx.player?.setEnabled?.(true);
     ctx.hud?.letterbox?.(false); ctx.hud?.setVisible?.(true); ctx.hud?.subtitle?.('');
-    ctx.hud?.objective?.('Bring down the Titan', 'Sever the tendons in its hands and ankles, then cut the nape. Protect the fleeing townspeople.');
+    ctx.hud?.objective?.('Bring down the Titan', 'Sever the tendons in its hands and ankles, then cut the nape. Stay clear when it vents steam.');
     lastPhase = Math.max(1, C()?.phase | 0);
     const b = PHASE_BANNERS[lastPhase]; ctx.hud?.banner?.(b[1], b[2], { cap: b[0] });
     try { ctx.titans?.civilians?.spawnCrowd?.(60, { center: V(0, 0, 210), x: 0, z: 210, radius: 150 }); } catch (e) { console.warn('[director] civilians', e); }
@@ -188,7 +189,8 @@ export async function create(ctx) {
     const ph = p?.phase | 0; if (!ph || ph === lastPhase || ctx.mode === 'intro') return; lastPhase = ph;
     const b = PHASE_BANNERS[ph]; if (b && d.fight) ctx.hud?.banner?.(b[1], b[2], { cap: b[0] });
     if (ctx.mode === 'play') music(phaseMusic());
-    if (ph >= 2) town.alarm(10);
+    // sky follows the fight (RENDER moods): phase II golden, phase III afternoon
+    if (ph === 2) ctx.sky?.setMood?.('golden'); else if (ph >= 3) ctx.sky?.setMood?.('afternoon');
   });
   E.on('colossal:killed', () => {
     if (ending) return; ending = true; endT = 0; d.fight = false;

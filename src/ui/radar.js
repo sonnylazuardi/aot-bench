@@ -134,6 +134,7 @@ export function createRadar(ctx, parent) {
   }
 
   return {
+    el: wrap,
     update(dt) { acc += dt; if (acc < 1 / 15) return; const a = acc; acc = 0; draw(a); },
     setRange(r) { range = r; },
   };

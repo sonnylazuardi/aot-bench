@@ -19,7 +19,7 @@ export const WORLD = {
     k.chain(k.noise(0, 4, 'brown'), k.lp(420), k.perc(0.01, 0.01, 2.8, 1.3), O);
     k.chain(k.flutter(k.chain(k.noise(0, 9, 'pink'), k.bp(520, 0.6), k.env([[0, 0.1], [0.4, 0.9], [2.5, 0.6], [7.5, 0]])), 9, 0.6), O); // crumbling mass
     k.grind(0.3, 6, { f: 150, amp: 1.1, rate: 11 });
-    k.chain(k.noise(0, 12, 'brown'), k.lp(80), k.env([[0, 0], [0.2, 1.1], [5, 0.9], [11.9, 0]]), O);
+    k.chain(k.noise(0, 12, 'brown'), k.lp(80), k.env([[0, 0], [0.2, 0.6], [5, 0.45], [11.9, 0]]), O);
     for (let i = 0; i < 130; i++) {
       const t = 0.12 + Math.pow(k.r(), 1.6) * 8.5, big = k.r() < 0.35;
       k.hit(t, { f: big ? k.rand(110, 500) : k.rand(600, 3800), Q: k.rand(0.8, 3), d: big ? k.rand(0.12, 0.4) : k.rand(0.02, 0.12), amp: k.rand(0.2, 0.7) * (1 - t / 10.5) * (big ? 1.2 : 0.6), color: big ? 'pink' : 'white' });
@@ -190,8 +190,8 @@ export const WORLD = {
   // after the breach: the whole town burning and collapsing somewhere out there (distant, low, swelling)
   war_bed: { dur: 12, ch: 2, variants: 1, loop: 1.5, build(k) {
     const O = k.out;
-    k.chain(k.flutter(k.chain(k.noise(0, 12, 'brown', 2), k.lp(140)), 0.5, 0.8, 1), O);
-    k.chain(k.flutter(k.chain(k.noise(0, 12, 'pink', 2), k.bp(600, 0.5)), 1.2, 0.6, 0.18), O);
-    for (let i = 0; i < 7; i++) { const t = k.rand(0, 11), p = k.pan(k.rand(-1, 1)); p.connect(O); k.thump(t, { f0: k.rand(50, 80), f1: 28, drop: 0.5, d: 1.5, amp: k.rand(0.15, 0.35), dest: k.via(k.lp(180), p) }); k.crackle(t + 0.1, 1.5, 12, { fLo: 400, fHi: 1500, amp: 0.05, dest: p }); }
+    k.chain(k.flutter(k.chain(k.noise(0, 12, 'pink', 2), k.bp(700, 0.45)), 0.4, 0.7, 0.6), O);   // wind over the wall tops
+    k.chain(k.flutter(k.chain(k.noise(0, 12, 'white', 2), k.hp(3500)), 0.7, 0.6, 0.08), O);
+    for (let i = 0; i < 4; i++) { const t = k.rand(0.5, 11), p = k.pan(k.rand(-1, 1)); p.connect(O); k.thump(t, { f0: k.rand(70, 100), f1: 40, drop: 0.3, d: 1.2, amp: k.rand(0.12, 0.25), dest: k.via(k.lp(500), p) }); k.crackle(t + 0.05, 1.2, 10, { fLo: 500, fHi: 2000, amp: 0.05, dest: p }); }
   } },
 };

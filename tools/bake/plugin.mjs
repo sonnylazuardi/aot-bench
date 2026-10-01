@@ -1,8 +1,9 @@
 // Vite plugin: serves / ships baked results of expensive pure builders (SDF titans, the giant's parts).
 //   dev:   GET /__bake/<system>/<key>.bin?a=<argsJson>  -> 200 cached bytes | 204 (miss; baked in the background, niced)
 //          a source edit in a builder's import closure re-bakes every known key for that system in the background.
-//   build: every key ever requested in dev (node_modules/.cache/aot-bake/keys.json) is baked for the current sources
-//          and emitted as dist/__bake/<system>/<key>.bin (AOT_BAKE=0 skips).
+//   build: every key ever requested in dev (node_modules/.cache/aot-bake/keys.json) plus the committed seed
+//          (tools/bake/keys.json, so CI builds such as Cloudflare Pages bake too) is baked for the current sources
+//          and emitted as dist/__bake/<system>/<key>.bin (AOT_BAKE=0 skips). Each build refreshes the seed.
 // Client: src/core/bake.js fetchBaked(system, args). Format: src/core/bakeCodec.js.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,6 +17,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const WORKER = path.join(ROOT, 'tools/bake/worker.mjs');
 const CACHE = path.join(ROOT, 'node_modules/.cache/aot-bake');
 const KEYS = path.join(CACHE, 'keys.json');
+const SEED = path.join(ROOT, 'tools/bake/keys.json');
 
 // system -> pure builder (module path relative to the project root, exported function). args come from the client.
 export const BAKERS = {
@@ -43,7 +45,16 @@ export function sourceHash(system) {
   return h.digest('hex').slice(0, 12);
 }
 
-const readKeys = () => { try { return JSON.parse(fs.readFileSync(KEYS, 'utf8')); } catch { return {}; } };
+const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return {}; } };
+const readKeys = () => readJson(KEYS);
+function buildKeys() {   // seed ∪ dev keys, sorted so the committed seed diffs cleanly
+  const seed = readJson(SEED), dev = readKeys(), out = {};
+  for (const system of Object.keys(BAKERS)) {
+    const all = { ...seed[system], ...dev[system] };
+    out[system] = Object.fromEntries(Object.keys(all).sort().map((k) => [k, all[k]]));
+  }
+  return out;
+}
 function rememberKey(system, key, args) {
   const k = readKeys();
   k[system] ||= {};
@@ -141,7 +152,8 @@ export function bakePlugin() {
     },
     async generateBundle() {
       if (process.env.AOT_BAKE === '0') return;
-      const keys = readKeys();
+      const keys = buildKeys();
+      try { fs.writeFileSync(SEED, JSON.stringify(keys, null, 1) + '\n'); } catch {}
       const conc = Math.max(1, os.cpus().length - 1);
       for (const system of Object.keys(BAKERS)) {
         let hash; try { hash = sourceHash(system); } catch (e) { this.warn(`bake ${system}: ${e.message}`); continue; }

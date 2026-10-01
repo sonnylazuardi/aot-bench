@@ -18,6 +18,24 @@ secondary: at most 2–4 small ambient ones for scale. CIVILIANS: fleeing townsp
 the giant grabs and eats. Sky mood after the breach: 'inferno' (smoke-choked orange/red, embers,
 lightning in the clouds).
 
+## ⚠ USER FEEDBACK (Oct 1) — FINAL BOSS = COLOSSAL TITAN; fix sound; fix shake shimmer
+Playtest video: /mnt/c/Users/sonny/Downloads/aot.mp4 (1080p30, 153 s) — extract frames/audio with ffmpeg to see the real issues.
+BOSS: replace the Smiling Titan with the COLOSSAL TITAN (`ref/final_boss_colossal.png`): skinless, deep red striated muscle meat
+everywhere, white/pale fascia + skin plates on the skull (forehead, brow, cheekbones, around the eye sockets), lipless jaw with a full
+exposed row of teeth and cheek muscle strands, deep shadowed eye sockets, bald, massive neck/trapezius cords, heavy steam venting.
+HIGH DETAIL on head and body. No grin, no hair, no human eating — its signature attack is scalding STEAM BLASTS. HUD name
+"THE COLOSSAL TITAN". ctx.colossal API unchanged.
+SOUND: the user says the sound is terrible (measured: −24.7 LUFS integrated, −13.7 dBFS peak, LRA 4.4 → quiet, flat, lifeless).
+SHAKE: during camera shake textures look "glitching" (shimmer/aliasing/ghosting) — must be clean.
+
+## ⚠ USER FEEDBACK (21:15) — supersedes the 'inferno' mood and house destruction
+SKY/MOOD: NO inferno, minimal fire. The battle happens under an EPIC CLEAR SKY: vivid blue with crisp, sunlit white cumulus
+(`ref/sky_blue_day.png`) that WARMS INTO a soft afternoon glow — peach/pink/lavender sky, luminous haze, pastel aerial perspective on
+the town and spires (`ref/sky_afternoon_pink.png`) — as the fight progresses (phase 1 blue day → phase 2 golden → phase 3 pink afternoon).
+Moods: 'day' → 'golden' → 'afternoon'. At most a few thin smoke/dust wisps at the breach; no burning town, no embers field.
+BUILDINGS STAY INTACT: houses never collapse (no crushing by the giant, boulders or damage calls). Only the WALL breaks (the gate breach
++ wall-top bites where the giant grips). world.damage() on houses → dust/debris puff only.
+
 ## Run / see it
 - Dev server is already running at **http://127.0.0.1:5190** (Vite HMR). Do NOT start another one on 5190.
 - Screenshot: `node tools/shot.mjs --url "/?skip=1" --out shots/<you>/<name>.png [--advance 3] [--wait 1500] [--eval "js"] [--seq 6 --every 0.5]`

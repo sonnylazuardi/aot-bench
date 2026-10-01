@@ -119,8 +119,8 @@ export async function create(ctx) {
     ctx.fx?.dust?.(_v.set(p.x, ground(p.x, p.z) + 0.2, p.z), 0.35 * h * (0.6 + 0.4 * k), { color: 0x9a8b76 });
     ctx.audio?.play?.('titan_step', { position: p, volume: clamp(0.35 + h / 16, 0.3, 1.2), rate: clamp(1.25 - h / 28, 0.6, 1.3) });
     // stomping onto a house crushes it
-    const bs = ctx.world?.buildings;
-    if (bs && bs.length) {
+    if (ctx.world?.buildings?.length) {
+      const bs = nearBuildings(p.x, p.z, 1);
       for (const b of bs) {
         if (b.destroyed || !b.box) continue;
         if (p.x > b.box.min.x - 0.5 && p.x < b.box.max.x + 0.5 && p.z > b.box.min.z - 0.5 && p.z < b.box.max.z + 0.5) {
@@ -313,15 +313,21 @@ export async function create(ctx) {
     t.anim.jawT = 0.05;
   }
 
-  // shoulder through houses
+  // shoulder through houses (grid-indexed building query shared with the civilians)
+  const _near = [];
+  function nearBuildings(x, z, r) {
+    if (civilians.buildingsIn) return civilians.buildingsIn(x, z, r, _near);
+    return ctx.world?.buildings || _near;
+  }
   function bumpBuildings(t) {
-    const bs = ctx.world?.buildings;
-    if (!bs || !bs.length || t.speed < 0.3) return;
+    if (!ctx.world?.buildings?.length || t.speed < 0.3) return;
     const me = t.object.position, H = t.height;
     const fx = Math.sin(t.heading), fz = Math.cos(t.heading);
     const r = H * 0.2;
     const px = me.x + fx * H * 0.12, pz = me.z + fz * H * 0.12;
-    for (const b of bs) {
+    const bs = nearBuildings(px, pz, r);
+    for (let i = 0; i < bs.length; i++) {
+      const b = bs[i];
       if (b.destroyed || !b.box) continue;
       const bx = clamp(px, b.box.min.x, b.box.max.x), bz = clamp(pz, b.box.min.z, b.box.max.z);
       const d = Math.hypot(px - bx, pz - bz);

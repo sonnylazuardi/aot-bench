@@ -10,7 +10,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const full = process.argv.includes('--full');
 
 const PROBE = `(async () => {
-  const g = window.__game, c = window.__ctx, log = [];
+  const g = window.__game, c = window.__ctx, log = [], warn = [];
   const snap = (tag) => log.push([tag, c.mode, c.cameraOwner, c.colossal?.state, c.colossal?.phase].join(' '));
   const stubs = Object.entries(g.loadTimes || {}).filter(([k, v]) => v && v.status && !/^(ok|skipped)$/.test(v.status)).map(([k, v]) => k + ':' + v.status);
   if (__FLOW__) {
@@ -26,8 +26,14 @@ const PROBE = `(async () => {
       c.events.emit('colossal:killed', {});
       for (let i = 0; i < 12 && c.mode !== 'victory'; i++) { g.advance(5); snap('kill+' + (i + 1) * 5); }
     }
-  } else { g.advance(5); snap('fight+5'); }
-  return { log, stubs, errors: c.errors, ready: g.loadTimes?.ready?.ms, perf: (({ calls, triangles, programs, jsMs }) => ({ calls, triangles, programs, jsMs }))(g.perf()) };
+  } else {
+    g.advance(5); snap('fight+5');
+    // visual invariants that don't throw: the giant must cast a shadow; the frame must stay inside the draw budget
+    const bd = g.perf({ breakdown: true }).breakdown;
+    const gs = bd.rows.filter((r) => r.key === 'shadow:colossal').reduce((a, r) => a + r.calls, 0);
+    if (!gs) warn.push('giant casts no shadow (0 shadow draws under colossal)');
+  }
+  return { log, warn, stubs, errors: c.errors, ready: g.loadTimes?.ready?.ms, perf: (({ calls, triangles, programs, jsMs }) => ({ calls, triangles, programs, jsMs }))(g.perf()) };
 })()`;
 
 function run(url, flow) {
@@ -45,6 +51,7 @@ function run(url, flow) {
   for (const l of [...new Set(bad)].slice(0, 15)) console.log('   ' + l.slice(0, 400));
   if (res?.errors?.length) console.log('   ctx.errors: ' + JSON.stringify(res.errors).slice(0, 400));
   if (res?.stubs?.length) console.log('   stubs: ' + res.stubs.join(' '));
+  for (const w of res?.warn || []) console.log('   WARN ' + w);
   if (full && flow && res) console.log('   flow: ' + res.log.join(' | '));
   return ok;
 }

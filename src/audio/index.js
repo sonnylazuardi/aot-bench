@@ -12,15 +12,16 @@ import { Score } from './score.js';
 
 // render order: what the first seconds need first; long cinematic beds last
 const ORDER = ['ui_tick', 'ui_confirm', 'taiko', 'taiko_hi', 'rim', 'gran', 'odaiko', 'swell', 'impact', 'wind',
-  'thunder', 'transform', 'giant_step', 'giant_roar', 'wall_crush', 'wall_break', 'boom', 'bell', 'scream', 'giant_grab', 'giant_bite', 'giant_giggle', 'giant_breath', 'rubble',
+  'thunder', 'transform', 'giant_step', 'giant_roar', 'wall_crush', 'wall_break', 'boom', 'bell', 'scream', 'giant_grab', 'steam_blast', 'giant_breath', 'rubble',
   'hook_fire', 'hook_hit_stone', 'hook_hit_wood', 'hook_hit_flesh', 'gas', 'slash', 'reel', 'nape_kill', 'body_hit', 'blade_swap', 'blade_break', 'gas_empty', 'grab', 'heartbeat',
-  'giant_groan', 'giant_hurt', 'whoosh', 'steam_jet', 'crunch', 'steam', 'titan_step', 'titan_roar', 'titan_groan', 'cannon', 'fire', 'giant_fall',
+  'giant_groan', 'giant_hurt', 'whoosh', 'steam_jet', 'crunch', 'steam', 'titan_step', 'titan_roar', 'titan_groan', 'cannon', 'giant_fall',
   'town_calm', 'crowd', 'war_bed'];
 const LOOPABLE = ['reel', 'steam', 'steam_jet'];
-const GROUP = { crunch: 'bite', giant_bite: 'bite', grab: 'grab', giant_grab: 'grab', steam: 'steam', steam_jet: 'steam',
+const LAZY = new Set(['fire', 'giant_giggle', 'giant_bite']); // not used by the current scene: synthesised only on first request
+const GROUP = { crunch: 'bite', giant_bite: 'bite', grab: 'grab', giant_grab: 'grab', steam: 'steam', steam_jet: 'steam', steam_blast: 'steam',
   hook_hit_stone: 'hook_hit', hook_hit_wood: 'hook_hit', hook_hit_flesh: 'hook_hit', titan_roar: 'roar', giant_roar: 'roar',
   titan_groan: 'groan', giant_groan: 'groan', giant_hurt: 'groan', wall_break: 'wall', wall_crush: 'wall' };
-const GIANT_VOICE = new Set(['giant_roar', 'giant_giggle', 'giant_groan', 'giant_hurt', 'giant_bite']);
+const GIANT_VOICE = new Set(['giant_roar', 'giant_groan', 'giant_hurt']);
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 export async function create(ctx) {
@@ -41,7 +42,7 @@ export async function create(ctx) {
   const renderAll = new Promise((resolve) => {
     startRender = () => {
       if (t0) return; t0 = performance.now();
-      const queue = ORDER.concat(Object.keys(SOUNDS).filter((n) => !ORDER.includes(n)));
+      const queue = ORDER.concat(Object.keys(SOUNDS).filter((n) => !ORDER.includes(n) && !LAZY.has(n)));
       const idle = () => new Promise((r) => (window.requestIdleCallback ? requestIdleCallback(() => r(), { timeout: 60 }) : setTimeout(r, 8)));
       const worker = async () => {
         while (queue.length) {
@@ -59,6 +60,13 @@ export async function create(ctx) {
       initPools().then(() => Promise.all([worker(), worker(), worker()])).then(() => { stats.renderMs = Math.round(performance.now() - t0); resolve(); });
     };
   });
+  const lazyP = {};
+  function ensure(name) { // on-demand render for LAZY sounds (the request itself is skipped; loops start when ready)
+    if (!LAZY.has(name) || buffers[name] || lazyP[name]) return;
+    const def = SOUNDS[name];
+    lazyP[name] = (async () => { const list = []; for (let v = 0; v < def.variants; v++) list.push(await renderSound(name, v)); buffers[name] = list; if (LOOPABLE.includes(name)) loopBuffers[name] = [await renderSound(name, 0, true)]; stats.rendered++; })()
+      .catch((e) => { stats.errors++; console.warn('[audio] lazy render failed', name, e); });
+  }
   ctx.events.on('loaded', () => setTimeout(() => startRender(), 50));
   setTimeout(() => startRender(), 45000); // safety net if 'loaded' never fires
 
@@ -104,8 +112,7 @@ export async function create(ctx) {
       case 'titan_roar': return dHead < 55 ? 'giant_roar' : name;
       case 'titan_groan': return dHead < 55 ? ((o.rate ?? 1) >= 1.1 ? 'giant_hurt' : 'giant_groan') : name;
       case 'titan_step': return dRoot < 70 ? 'giant_step' : name;
-      case 'crunch': return dHead < 35 ? 'giant_bite' : name;
-      case 'steam': return dRoot < 90 && pos.y > 12 ? 'steam_jet' : name;
+      case 'steam': return dRoot < 90 && pos.y > 12 ? 'steam_blast' : name;
       case 'gas': return (o.rate ?? 1) < 0.6 && dPlayer > 15 ? 'whoosh' : name;
       case 'grab': return dRoot < 90 && dPlayer > 6 ? 'giant_grab' : name;
     }
@@ -118,6 +125,7 @@ export async function create(ctx) {
     try {
       const orig = name; name = remap(name, opts);
       if (!SOUNDS[name]) return null;
+      ensure(name);
       const grp = GROUP[name] || name, pos = opts.position?.isVector3 ? opts.position : null;
       const r = recent[grp];
       if (r && simT - r.t < 0.06 && (!pos || !r.pos || pos.distanceToSquared(r.pos) < 100)) { stats.deduped++; return null; }
@@ -162,6 +170,7 @@ export async function create(ctx) {
       get playing() { return !!this.inner?.playing; },
     };
     if (!SOUNDS[name]) return h;
+    ensure(name);
     if (mx) attachLoop(h); else pendingLoops.add(h);
     return h;
   }
@@ -185,14 +194,14 @@ export async function create(ctx) {
   });
   on('player:hurt', (p) => { const a = p.amount ?? 0.2; play('body_hit', { volume: 0.6 + Math.min(0.6, a) }); if (a > 0.25) mx?.shellshock(Math.min(1, a), 1.6); });
   on('player:grabbed', () => { fb('grab'); duck(0.4, 2.5); });
-  on('player:died', () => { if (C()?.active) setTimeout(() => play('giant_giggle', { position: headPos().clone(), volume: 1 }), 1400); });
+  on('player:died', () => { if (C()?.active) setTimeout(() => play('giant_groan', { position: headPos().clone(), volume: 1 }), 1400); });
   on('colossal:appear', () => { const c = L.colossal || { x: 0, z: 440, height: 60 }; fb('transform', { position: V(c.x, (c.height || 60) * 0.8, c.z) }, 1.5); duck(0.7, 6); });
   on('colossal:kick', (p) => fb('boom', { position: p.point || V(0, 25, (L.colossal?.z || 440) - 40), volume: 1.3 }));
   on('colossal:grip', (p) => fb('wall_crush', { position: p.point }, 1));
   on('colossal:attack', (p) => {
     const type = String(p.type || '').toLowerCase(), pt = p.point?.isVector3 ? p.point : headPos().clone();
     if (/roar|shock|howl/.test(type)) fb('giant_roar', { position: headPos().clone() }, 2);
-    else if (/steam|vent|burst/.test(type)) fb('steam_jet', { position: pt, volume: 1.2 }, 1);
+    else if (/steam|vent|burst/.test(type)) fb('steam_blast', { position: pt, volume: 1.2 }, 1);
     else if (/stomp|quake|jump|land/.test(type)) { play('giant_step', { position: pt, volume: 1.3, rate: 0.9 }); fb('boom', { position: pt, volume: 0.7 }); }
     else if (/slam|smash|crush|punch|kick|wall/.test(type)) { fb('whoosh', { position: headPos().clone(), volume: 0.8 }, 1); fb('wall_crush', { position: pt }, 1); }
     else if (/bite|eat/.test(type)) { /* the bite itself arrives with civilian:eaten / crunch */ }
@@ -219,8 +228,7 @@ export async function create(ctx) {
   const civPos = (p) => p.position || p.civ?.position || p.civilian?.position || p.civ?.object?.position || p.point || null;
   on('civilian:grabbed', (p) => fb('scream', { position: civPos(p) || headPos().clone(), volume: 1.1, rate: 1 + Math.random() * 0.2 }));
   on('civilian:eaten', (p) => {
-    fb('giant_bite', { position: civPos(p) || headPos().clone() }, 0.6);
-    if (Math.random() < 0.55) setTimeout(() => { if (simT - lastGiantVoice > 1.5) play('giant_giggle', { position: headPos().clone(), volume: 0.9 }); }, 1500 + Math.random() * 800);
+    fb('crunch', { position: civPos(p) || headPos().clone() }, 0.6);
   });
   on('titan:killed', (p) => {
     const t = p.titan, pos = t?.position || t?.object?.position; if (!pos) return;
@@ -263,7 +271,7 @@ export async function create(ctx) {
       giggleT -= dt;
       if (giggleT <= 0) {
         giggleT = 8 + Math.random() * 9;
-        if (simT - lastGiantVoice > 4 && headPos().distanceTo(listenerPos) < 420) play(Math.random() < 0.75 ? 'giant_giggle' : 'giant_groan', { position: headPos().clone(), volume: 0.9 + Math.random() * 0.2 });
+        if (simT - lastGiantVoice > 4 && headPos().distanceTo(listenerPos) < 420) play('giant_groan', { position: headPos().clone(), volume: 0.9 + Math.random() * 0.2 });
       }
     }
     if (mode !== 'play') return;
@@ -322,6 +330,22 @@ export async function create(ctx) {
   }
 
   // ------------------------------------------------ debug / offline verification
+  // ITU-R BS.1770 integrated loudness (K-weighting via native biquads, 400 ms blocks, -70/-10 gates) + short-term range
+  async function loudness(b) {
+    const oc = new OfflineAudioContext(b.numberOfChannels, b.length, b.sampleRate), s = oc.createBufferSource(); s.buffer = b;
+    const sh = oc.createBiquadFilter(); sh.type = 'highshelf'; sh.frequency.value = 1681; sh.gain.value = 4; const hp = oc.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 38; hp.Q.value = 0.5;
+    s.connect(sh); sh.connect(hp); hp.connect(oc.destination); s.start(); const k = await oc.startRendering();
+    const sr = k.sampleRate, blk = Math.floor(0.4 * sr), hop = Math.floor(0.1 * sr), ms = [];
+    const ch = [...Array(k.numberOfChannels).keys()].map((c) => k.getChannelData(c));
+    for (let i = 0; i + blk <= k.length; i += hop) { let z = 0; for (const d of ch) { let a = 0; for (let j = i; j < i + blk; j++) a += d[j] * d[j]; z += a / blk; } ms.push(z); }
+    const L = (z) => -0.691 + 10 * Math.log10(z + 1e-12);
+    const g1 = ms.filter((z) => L(z) > -70), I1 = L(g1.reduce((a, z) => a + z, 0) / Math.max(1, g1.length));
+    const g2 = g1.filter((z) => L(z) > I1 - 10), I = L(g2.reduce((a, z) => a + z, 0) / Math.max(1, g2.length));
+    // short-term (3 s) range, 10th..95th percentile above -20 LU gate
+    const st = []; const n3 = 30; for (let i = 0; i + n3 <= ms.length; i += 10) { let z = 0; for (let j = i; j < i + n3; j += 4) z += ms[j]; st.push(L(z / Math.ceil(n3 / 4))); }
+    const sg = st.filter((x) => x > I - 20).sort((a, b2) => a - b2), q = (p) => sg[Math.min(sg.length - 1, Math.floor(p * (sg.length - 1)))] ?? I;
+    return { lufs: +I.toFixed(1), lra: +(q(0.95) - q(0.1)).toFixed(1), stMax: +(sg[sg.length - 1] ?? I).toFixed(1) };
+  }
   const lvl = (b) => { const r0 = lvl0(b), gd = 20 * Math.log10(b._gain ?? 1); return { ...r0, peakDb: +(r0.peakDb + gd).toFixed(1), rmsDb: +(r0.rmsDb + gd).toFixed(1) }; };
   const lvl0 = (b) => { let pk = 0, s = 0, nan = 0; for (let c = 0; c < b.numberOfChannels; c++) { const d = b.getChannelData(c); for (let i = 0; i < d.length; i++) { const x = d[i]; if (!Number.isFinite(x)) { nan++; continue; } const a = Math.abs(x); if (a > pk) pk = a; s += x * x; } } return { dur: +b.duration.toFixed(2), peakDb: +(20 * Math.log10(pk + 1e-12)).toFixed(1), rmsDb: +(10 * Math.log10(s / (b.length * b.numberOfChannels) + 1e-12)).toFixed(1), nan }; };
   const debug = {
@@ -329,14 +353,18 @@ export async function create(ctx) {
     level(name, v = 0) { const b = buffers[name]?.[v]; return b ? lvl(b) : null; },
     meter() { return mx?.meter() ?? null; },
     // render a scripted scene through the real mix chain offline: [[time, name, {position, volume}], ...] + optional music state
-    async renderScene(script, secs = 10, { state = null, listener = V(-22, 12, 120) } = {}) {
+    async renderScene(script, secs = 10, { state = null, listener = V(-22, 12, 120), loops = [], wind = null, loud = false } = {}) {
       await renderAll;
       const oc = new OfflineAudioContext(2, Math.ceil(secs * 44100), 44100);
       const m = new Mixer(oc, { buffers, loopBuffers, wallRadius: 380 }); m.setListener(listener, V(0, 0, 1), V(0, 1, 0), 0); m.update(0);
       if (state) { const sc = new Score(oc, m.g.music, buffers); sc.setState(state, 0); sc.schedule(secs); }
+      for (const [name, o] of loops) m.loop(name, o);
+      if (wind) for (const [t, spd] of wind) m.updateWind(spd, listener.y, 0, false, t);
       for (const [t, name, o = {}] of script) m.play(name, { ...o, when: t });
-      return lvl(await oc.startRendering());
+      const b = await oc.startRendering();
+      return loud ? { ...lvl0(b), ...(await loudness(b)) } : lvl0(b);
     },
+    loudness: (b) => loudness(b),
   };
   return { update, unlock, play, loop, music, duck, stinger, motif, setMasterVolume, debug,
     heroic: (n) => score?.heroic(n), shellshock: (k, s) => mx?.shellshock(k, s),

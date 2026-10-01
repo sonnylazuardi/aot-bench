@@ -137,7 +137,6 @@ export function createBrain(ctx, G) {
     ctx.shake?.(0.5, { at: g, radius: 260 });
     audio('titan_step', { position: g, volume: 1 });
     fx('dust', g, 9, { color: 0xb8a58a });
-    try { ctx.world?.damage?.(g, 10, 0.9); } catch {}
     const pl = player();
     if (playerOK() && pl.state === 'ground' && pl.position.distanceTo(g) < 12) { pl.hurt?.(0.5, _v4.copy(pl.position).sub(g).normalize()); }
   }
@@ -296,6 +295,41 @@ export function createBrain(ctx, G) {
         }
         break;
       }
+      case 'blast': { // signature attack: scalding steam blast — telegraphed wind-up, then the body erupts
+        const WIND = 1.6, DUR = 2.4;
+        if (t < WIND) {
+          const k = s5(0, WIND, t);
+          S.steamWarn = k * 0.95;
+          pose.headPitch -= 0.18 * k; pose.lean -= 0.1 * k; pose.jaw = 0.12 * k;
+          S.hurt = Math.max(S.hurt, 0.9 * k);
+          pose.side += Math.sin(t * 22) * 0.012 * k;
+          if (!a.hiss) { a.hiss = true; audio('steam', { position: G.headPosition, volume: 0.6, rate: 0.6 }); audio('titan_groan', { position: G.headPosition, volume: 0.9, rate: 0.5 }); }
+          if (Math.random() < dt * 6 * k) G.woundSteam?.(WPN.nape.position, 0.3);
+        } else if (t < WIND + DUR) {
+          const u = t - WIND;
+          S.steamWarn = 1 - s5(0.2, DUR, u);
+          S.blasting = true; S.burstT = u * (3.2 / DUR);
+          S.hurt = Math.max(S.hurt, 1);
+          pose.headPitch -= 0.18 * (1 - s5(0, DUR, u)); pose.jaw = 0.25;
+          if (!a.did) {
+            a.did = true;
+            const p = WPN.nape.position.clone();
+            audio('steam', { position: p, volume: 1 }); audio('titan_roar', { position: G.headPosition, volume: 1, rate: 0.7 });
+            ctx.shake?.(0.6, { at: p, radius: 300 }); ctx.post?.punch?.(0.5);
+            burst(1.4);
+            try { fx('steam', root.position.clone().add(_v.set(0, 40, 0)), 60, 3, { burst: true }); } catch {}
+            emit('colossal:attack', { type: 'steam', point: p });
+          }
+          a.heatT = (a.heatT || 0) - dt;
+          if (a.heatT <= 0 && playerOK()) {
+            a.heatT = 0.4;
+            const pl = player(), d = pl.position.distanceTo(WPN.nape.position);
+            const db = pl.position.distanceTo(rig.bone('chest').getWorldPosition(_v2));
+            if (Math.min(d, db) < 34) pl.hurt?.(0.1, _v.copy(pl.position).sub(WPN.nape.position).normalize());
+          }
+        } else { S.blasting = false; S.steamWarn = 0; endAction(rnd(2.5, 4)); }
+        break;
+      }
       case 'roar': { // head thrown back, the grin splits wide: shockwave knocks the soldier away
         if (t < 1.0) {
           const k = s5(0, 1.0, t);
@@ -330,7 +364,7 @@ export function createBrain(ctx, G) {
           for (const s of ['L', 'R']) { const sd = s === 'L' ? 1 : -1; hs[s].target.set(0.2 * sd, 1.75, 0.15).add(pose.rootOff).lerp(_v.copy(front).add(_v3.set(0.12 * sd, 0, 0)), k * k); hs[s].f.set(0, -1, 0.5); hs[s].d.set(0, 0, 1); }
           pose.lean = S.lean + 0.5 * k; pose.rootOff.y -= 0.2 * k;
         } else {
-          if (!a.did) { a.did = true; const p = toWorld(front, V()); p.y = ground(p.x, p.z); shockwave(p, 120, 60, 0.3); try { ctx.world?.damage?.(p, 22, 1); } catch {} emit('colossal:attack', { type: 'slam', point: p }); }
+          if (!a.did) { a.did = true; const p = toWorld(front, V()); p.y = ground(p.x, p.z); shockwave(p, 120, 60, 0.3); try { ctx.world?.damage?.(p, 22, 0.25); } catch {} emit('colossal:attack', { type: 'slam', point: p }); }
           const k = 1 - s5(1.45, 2.8, t);
           for (const s of ['L', 'R']) { const sd = s === 'L' ? 1 : -1; hs[s].target.copy(front).add(_v3.set(0.12 * sd, 0, 0)); }
           pose.lean = S.lean + 0.5 * k; pose.rootOff.y -= 0.2 * k;
@@ -357,7 +391,7 @@ export function createBrain(ctx, G) {
           if (!a.started) { a.started = true; emit('colossal:attack', { type: 'sweep', point: toWorld(ang(0.5), V()) }); audio('gas', { position: G.headPosition, volume: 1, rate: 0.3 }); }
           a.dmgT = (a.dmgT || 0) - dt;
           palmW(a.hand, _v4);
-          if (a.dmgT <= 0) { a.dmgT = 0.1; try { ctx.world?.damage?.(_v4.clone(), 11, 0.8); } catch {} }
+          if (a.dmgT <= 0) { a.dmgT = 0.14; try { ctx.world?.damage?.(_v4.clone(), 9, 0.25); } catch {} }
           if (!a.hit && hitPlayer(_v4, 13, 0.35, 42, 12)) a.hit = true;
         } else if (t < 2.7) {
           pose.twist += side * -0.35 * (1 - s5(1.75, 2.7, t));
@@ -366,7 +400,7 @@ export function createBrain(ctx, G) {
       }
       case 'stomp': {
         const s = a.foot, f = gait.feet[s];
-        if (!a.aim) { a.aim = playerOK() ? player().position.clone() : footIdeal(s, V(), 0); a.aim.y = ground(a.aim.x, a.aim.z); a.from = f.w.clone(); f.planted = false; f.t = 0.5; f.lock = true; }
+        if (!a.aim) { a.aim = playerOK() ? player().position.clone() : footIdeal(s, V(), 0); a.aim.x = onPlaza(a.aim.z) ? clamp(a.aim.x, -PLZ.radius * 0.8, PLZ.radius * 0.8) : clamp(a.aim.x, -7, 7); a.aim.y = ground(a.aim.x, a.aim.z); a.from = f.w.clone(); f.planted = false; f.t = 0.5; f.lock = true; }
         if (t < 1.0) {
           const k = s5(0, 1.0, t);
           f.w.lerpVectors(a.from, _v.copy(a.aim).lerp(a.from, 0.3), k); f.w.y = a.from.y + 0.35 * K * k;
@@ -505,14 +539,12 @@ export function createBrain(ctx, G) {
       let best = null, bd = 1e9;
       for (const s of hands) { const d = palmW(s, _v).distanceTo(pl.position); if (d < bd) { bd = d; best = s; } }
       const shoulderD = rig.bone('upperArm' + best).getWorldPosition(_v).distanceTo(pl.position);
-      if (shoulderD < 48 && Math.random() < 0.35) return startAction('grab', { hand: best });
+      if (shoulderD < 70 && Math.random() < 0.3) return startAction('blast');
       if (shoulderD < 55) return startAction('swat', { hand: best });
       const hdist = pl.position.distanceTo(G.headPosition);
       if (hdist < 130 && Math.random() < 0.4 && hands.length === 2) return startAction('slam');
       if (hdist < 150 && Math.random() < 0.35) return startAction('roar');
     }
-    const civ = findCiv(40);
-    if (civ && Math.random() < 0.6) return startAction('eat', { hand: hands[(Math.random() * hands.length) | 0], civ });
     return startAction('crush', { hand: hands[(Math.random() * hands.length) | 0] });
   }
   function findCiv(reachM) {
@@ -542,19 +574,14 @@ export function createBrain(ctx, G) {
       const hd = pl.position.distanceTo(G.headPosition);
       let best = 'L', bd = 1e9;
       for (const s of hands) { const dd = rig.bone('upperArm' + s).getWorldPosition(_v).distanceTo(pl.position); if (dd < bd) { bd = dd; best = s; } }
-      if (pl.state === 'ground' && pl.position.y - ground(pl.position.x, pl.position.z) < 4 && d < 35) {
+      if (pl.state === 'ground' && pl.position.y - ground(pl.position.x, pl.position.z) < 4 && d < 35 && Math.abs(pl.position.x - streetX(pl.position.z, pl.position.x)) < 5) {
         const lf = gait.feet.L.w.distanceTo(pl.position) < gait.feet.R.w.distanceTo(pl.position) ? 'L' : 'R';
         return startAction('stomp', { foot: lf });
       }
-      if (bd < 45 && Math.random() < 0.4) return startAction('grab', { hand: best });
+      if (bd < 70 && Math.random() < 0.35) return startAction('blast');
       if (bd < 60 && pl.position.y < 60) return startAction('sweep', { hand: best });
       if (hd < 120 && Math.random() < 0.3) return startAction('gslam');
       if (hd < 150 && Math.random() < 0.3) return startAction('roar');
-    }
-    const civ = findCiv(46);
-    if (civ && (!pl || Math.random() < 0.5)) {
-      const s = rig.bone('upperArmL').getWorldPosition(_v).distanceTo(civ.position) < rig.bone('upperArmR').getWorldPosition(_v2).distanceTo(civ.position) ? 'L' : 'R';
-      return startAction('eat', { hand: s, civ });
     }
   }
   function pickPhase3() {
@@ -562,12 +589,9 @@ export function createBrain(ctx, G) {
     if (pl) {
       let best = 'L', bd = 1e9;
       for (const s of ['L', 'R']) { const dd = rig.bone('upperArm' + s).getWorldPosition(_v).distanceTo(pl.position); if (dd < bd) { bd = dd; best = s; } }
-      if (bd < 45 && Math.random() < 0.5) return startAction('grab', { hand: best });
       if (bd < 60) return startAction('sweep', { hand: best });
       if (Math.random() < 0.4) return startAction('roar');
     }
-    const civ = findCiv(44);
-    if (civ) return startAction('eat', { hand: Math.random() < 0.5 ? 'L' : 'R', civ });
   }
 
   // ---------------- modes ----------------
@@ -704,12 +728,17 @@ export function createBrain(ctx, G) {
     if (t > 7.0) { setPhase(2); setMode('stride'); S.cool = 1.5; }
   }
   const avenueGoal = V();
+  // the giant keeps its feet in the street: main avenue (x~0, 16 m wide) or the central plaza
+  const PLZ = ctx.LAYOUT.plaza;
+  const onPlaza = (z) => PLZ && Math.abs(z - PLZ.z) < PLZ.radius * 0.7;
+  const streetX = (z, x) => onPlaza(z) ? clamp(x, -PLZ.radius * 0.55, PLZ.radius * 0.55) : clamp(x, -3, 3);
   function modeStride(dt, time) {
     pose.rootOff.set(0, 0, 0); pose.twist = 0; pose.side = 0;
     const pl = playerOK() ? player() : null;
     // goal: toward the soldier, but stay on/near the avenue and inside the town
-    if (pl) avenueGoal.set(clamp(pl.position.x, -80, 80), 0, clamp(pl.position.z, -220, W.radius - 40));
+    if (pl) avenueGoal.set(0, 0, clamp(pl.position.z, -220, W.radius - 40));
     else avenueGoal.set(0, 0, 60);
+    avenueGoal.x = onPlaza(avenueGoal.z) ? clamp(pl ? pl.position.x : 0, -16, 16) : 0;
     const to = _v.copy(avenueGoal).sub(root.position); to.y = 0;
     const dist = to.length();
     const busy = !!S.action;
@@ -719,6 +748,7 @@ export function createBrain(ctx, G) {
     if (dist > 1) to.normalize();
     gait.vel.copy(to).multiplyScalar(gait.speed);
     root.position.addScaledVector(gait.vel, dt);
+    root.position.x = streetX(root.position.z, root.position.x);
     root.position.y = ground(root.position.x, root.position.z);
     // face travel / the soldier
     let yawGoal = root.rotation.y;
@@ -735,7 +765,7 @@ export function createBrain(ctx, G) {
     gazeUpdate(dt, time);
     // shins plough through houses
     S.plowT = (S.plowT || 0) - dt;
-    if (S.plowT <= 0 && gait.speed > 1) { S.plowT = 0.5; for (const s of ['L', 'R']) { const p = rig.bone('shin' + s).getWorldPosition(V()); p.y = ground(p.x, p.z) + 8; try { ctx.world?.damage?.(p, 9, 0.6); } catch {} } }
+    // (buildings stay intact: it walks the avenue, no ploughing)
     if (S.fighting) {
       S.cool -= dt;
       if (!S.action && S.cool <= 0) pickPhase2();
@@ -757,15 +787,22 @@ export function createBrain(ctx, G) {
       h.f.set(0.1 * sd, -0.2, 1); h.d.set(0, 1, 0); h.curl = [0.3, 0.3, 0.2, 0.15]; h.thumb = 0.3;
     }
   }
+  function faceAvenue(dt) {
+    const want = (playerOK() && player().position.z > root.position.z) ? 0 : Math.PI;
+    const dy = Math.atan2(Math.sin(want - root.rotation.y), Math.cos(want - root.rotation.y));
+    root.rotation.y += clamp(dy, -0.8 * dt, 0.8 * dt);
+    root.position.x += (streetX(root.position.z, root.position.x) - root.position.x) * (1 - Math.exp(-dt * 2));
+  }
   function modeKneel(dt, time) {
     const t = S.t;
+    faceAvenue(dt);
     const k = s5(0, 1.6, t);
     kneelPose(k);
     gazeUpdate(dt, time);
     pose.headPitch = 0.35 * k;
     if (!S.kneelHit && t > 1.3) {
       S.kneelHit = true;
-      for (const s of ['L', 'R']) { const p = rig.bone('shin' + s).getWorldPosition(V()); p.y = ground(p.x, p.z); ctx.shake?.(1.2, { at: p, radius: 400 }); fx('dust', p, 30, {}); try { ctx.world?.damage?.(p, 16, 1); } catch {} }
+      for (const s of ['L', 'R']) { const p = rig.bone('shin' + s).getWorldPosition(V()); p.y = ground(p.x, p.z); ctx.shake?.(1.2, { at: p, radius: 400 }); fx('dust', p, 30, {}); }
       audio('boom', { position: root.position, volume: 1 }); audio('titan_roar', { position: G.headPosition, volume: 1, rate: 0.85 });
     }
     if (t > 2.6) { setPhase(3); setMode('fury'); S.burstT = 0; S.steaming = false; S.cool = 3.5; S.kneelHit = false; }
@@ -776,6 +813,7 @@ export function createBrain(ctx, G) {
     pose.headPitch = 0.3;
     // steam cycle: calm 4.5 s (nape open) / burst 3.2 s
     S.burstT += dt;
+    S.steamWarn = S.steaming ? 1 - sstep(0.3, 3.2, S.burstT) : sstep(3.0, 4.5, S.burstT);
     if (!S.steaming && S.burstT > 4.5) { S.steaming = true; S.burstT = 0; startBurst(); }
     else if (S.steaming && S.burstT > 3.2) { S.steaming = false; S.burstT = 0; }
     S.hurt += ((S.steaming ? 1 : 0.35) - S.hurt) * (1 - Math.exp(-dt * 3));
@@ -801,6 +839,7 @@ export function createBrain(ctx, G) {
   }
   function modeDying(dt, time) {
     const t = S.t;
+    if (t < 2.2) faceAvenue(dt);
     const k = s5(0.3, 2.4, t);
     // topple face-first onto the town
     pose.rootOff.set(0, -0.47 - 0.3 * k, -0.08 + 0.25 * k);
@@ -814,7 +853,7 @@ export function createBrain(ctx, G) {
       const p = G.headPosition.clone(); p.y = ground(p.x, p.z);
       ctx.shake?.(1.5, { at: p, radius: 600 });
       audio('boom', { position: p, volume: 1 }); audio('rubble', { position: p, volume: 1 });
-      for (let i = 0; i < 5; i++) { const q = _v.copy(root.position).lerp(p, i / 4); q.y = ground(q.x, q.z); try { ctx.world?.damage?.(q.clone(), 18, 1); } catch {} fx('dust', q.clone(), 40, {}); }
+      for (let i = 0; i < 5; i++) { const q = _v.copy(root.position).lerp(p, i / 4); q.y = ground(q.x, q.z); fx('dust', q.clone(), 40, {}); }
       burst(1.5);
       try { fx('steam', p, 120, 14, { burst: true }); } catch {}
     }
@@ -841,7 +880,8 @@ export function createBrain(ctx, G) {
       case 'fury': modeFury(dt, time); break;
       case 'dying': modeDying(dt, time); break;
     }
-    if (S.mode !== 'fury') { S.steaming = false; S.hurt = Math.max(0, S.hurt - dt * 0.5); }
+    if (S.mode !== 'fury') { S.steaming = !!S.blasting; S.hurt = Math.max(0, S.hurt - dt * 0.5); }
+    if (!S.action || S.action.type !== 'blast') { S.blasting = false; if (S.mode !== 'fury') S.steamWarn = 0; }
     if (S.chewT > 0) { S.chewT -= dt; if (!S.action) pose.jaw = Math.max(pose.jaw, Math.max(0, Math.sin(time * 7) * 0.2)); }
     S.stagger = Math.max(0, S.stagger - dt);
     if (S.stagger > 0) { pose.side += Math.sin(time * 14) * 0.03 * S.stagger; pose.tilt += Math.sin(time * 11) * 0.1 * S.stagger; }
@@ -913,8 +953,10 @@ export function createBrain(ctx, G) {
       if (p === 3) { WPN.hand_L.hp = WPN.hand_R.hp = WPN.ankle_L.hp = WPN.ankle_R.hp = 0; if (S.mode === 'wall' || S.mode === 'hidden') { root.position.set(0, 0, 200); root.rotation.y = Math.PI; } setPhase(3); setMode('fury'); S.burstT = 0; }
     },
     get hp() { let s = 0; for (const w of weakPoints) s += w.hp; return s / weakPoints.length; },
-    eat(civ, hand = 'R') { if (!civ || S.mode === 'dying' || S.mode === 'dead' || S.mode === 'hidden') return false; startAction('eat', { hand, civ }); return true; },
-    chew() { S.chewT = 2.2; },
+    // the Colossal doesn't eat people: eat() (kept for API compatibility) fires its steam blast instead
+    eat() { if (S.mode === 'dying' || S.mode === 'dead' || S.mode === 'hidden' || S.action) return false; startAction('blast'); return true; },
+    blast() { if (S.mode === 'dying' || S.mode === 'dead' || S.mode === 'hidden') return false; startAction('blast'); return true; },
+    chew() {},
     lookAt(t) { S.gazeOverride = t ? (t.isVector3 ? t : null) : null; },
   };
 }

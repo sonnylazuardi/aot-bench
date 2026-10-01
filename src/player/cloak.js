@@ -73,7 +73,7 @@ export function createCloak(scene, bones) {
       { float rim = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);
         totalEmissiveRadiance += vec3(0.03, 0.05, 0.03) * rim + heroRig(normal, vViewPosition, diffuseColor.rgb); }`);
   };
-  mat.customProgramCacheKey = () => 'aot-cloak-v5';
+  mat.customProgramCacheKey = () => 'aot-cloak-v6';
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'SoldierCloak'; mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
   scene.add(mesh);

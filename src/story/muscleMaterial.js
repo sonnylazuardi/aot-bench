@@ -34,9 +34,9 @@ function injectCommonVertex(sh) {
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', `#include <common>
 attribute vec3 fibre; attribute vec4 mdata; attribute vec4 mdata2;
-varying vec3 vRest; varying vec3 vFibV; varying vec4 vMd; varying vec4 vMd2;`)
+varying vec3 vRest; varying vec3 vFibV; varying vec3 vFibR; varying vec4 vMd; varying vec4 vMd2;`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>
-vRest = position; vMd = mdata; vMd2 = mdata2;`)
+vRest = position; vFibR = fibre; vMd = mdata; vMd2 = mdata2;`)
     .replace('#include <skinnormal_vertex>', `#include <skinnormal_vertex>
 #ifdef USE_SKINNING
 vFibV = normalize(normalMatrix * (skinMatrix * vec4(fibre, 0.0)).xyz);
@@ -48,7 +48,7 @@ vFibV = normalize(normalMatrix * fibre);
 export function createSkinMaterial(eyeL = new THREE.Vector3(0, -9, 0), eyeR = new THREE.Vector3(0, -9, 0), eyeR0 = new THREE.Vector3(0.034, 0.02, 0.03)) {
   const uniforms = { ...COMMON_UNIFORMS(), uPore: { value: 1.0 }, uEyeL: { value: eyeL }, uEyeR: { value: eyeR }, uEyeRad: { value: eyeR0 } };
   const mat = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff, roughness: 0.42, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.3,
+    color: 0xffffff, roughness: 0.48, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.34,
   });
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (sh) => {
@@ -56,49 +56,52 @@ export function createSkinMaterial(eyeL = new THREE.Vector3(0, -9, 0), eyeR = ne
     injectCommonVertex(sh);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-varying vec3 vRest; varying vec3 vFibV; varying vec4 vMd; varying vec4 vMd2;
+varying vec3 vRest; varying vec3 vFibV; varying vec3 vFibR; varying vec4 vMd; varying vec4 vMd2;
 uniform vec3 uSunDirV, uSunCol, uFillDirV, uFillCol; uniform float uTime, uEvap, uHurt, uPore;
 uniform vec3 uEyeL, uEyeR, uEyeRad;
 ${NOISE}
-float sH; float sAO; float sEye; float sweat;`)
+float sH; float sAO; float sEye; float sweat; float bW;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
-  float nail = clamp(vMd.x, 0.0, 1.0), gum = clamp(vMd.y, 0.0, 1.0), lip = clamp(vMd2.x, 0.0, 1.0), flush = clamp(vMd2.y, 0.0, 1.0);
-  float cav = vMd2.z;
+  // SKINLESS COLOSSAL: striated muscle following each muscle's fibre direction, pale fascia plates on the skull
+  float plate = clamp(vMd.x, 0.0, 1.0), gum = clamp(vMd.y, 0.0, 1.0), cav = vMd2.z;
   sAO = vMd.z;
-  vec3 p = vRest;
-  float big = c_vn(p * 9.0) * 0.6 + c_vn(p * 23.0) * 0.4;
-  vec3 pale = vec3(0.58, 0.27, 0.14), tan = vec3(0.44, 0.19, 0.09);
-  vec3 col = mix(pale, tan, smoothstep(0.2, 0.85, big) * 0.22 + 0.3);
-  // blotchy redness + blush
-  col = mix(col, vec3(0.55, 0.17, 0.1), flush * 0.35 + c_vn(p * 40.0) * 0.06);
-  col = mix(col, vec3(0.5, 0.15, 0.13), lip * 0.8);
-  col = mix(col, vec3(0.62, 0.22, 0.24), gum);
-  col = mix(col, vec3(0.86, 0.66, 0.55), nail * 0.8);
-  // pores / micro bumps (anti-aliased by footprint)
-  vec3 q = p * 1500.0;
-  float fw = length(fwidth(q));
-  float pw = 1.0 - smoothstep(0.35, 0.9, fw);
-  float pore = c_vn(q) * 0.6 + c_vn(q * 2.3 + 7.0) * 0.4;
-  float wr = c_vn(p * 380.0);
-  float fw2 = length(fwidth(p * 380.0));
-  sH = mix(0.5, pore, pw) * 0.5 + mix(0.5, wr, 1.0 - smoothstep(0.3, 0.9, fw2)) * 0.3 + big * 0.2;
-  // crease / cavity: deeper, redder, darker (skin folds of the grin)
+  vec3 F = normalize(vFibR + 1e-5);
+  vec3 p = vRest * 46.0;
+  vec3 q = p - F * dot(p, F) * 0.9;          // compressed along the fibre -> long parallel strands
+  float fw = length(fwidth(q)) + 1e-4;
+  float w2 = 1.0 - smoothstep(0.25, 0.7, fw * 2.8);
+  float w3 = 1.0 - smoothstep(0.25, 0.7, fw * 8.0);
+  bW = 1.0 - smoothstep(0.3, 1.0, fw);     // band-limit the bump (no shimmer under camera shake)
+  float n1 = c_vn(q), n2 = c_vn(q * 2.8 + 17.1), n3 = c_vn(q * 8.0 + 5.3);
+  float r1 = 1.0 - abs(n1 * 2.0 - 1.0), r2 = 1.0 - abs(n2 * 2.0 - 1.0);
+  float mh = r1 * 0.55 + mix(0.5, r2, w2) * 0.33 + mix(0.5, n3, w3) * 0.12;
+  float groove = smoothstep(0.2, 0.62, mh);
+  // fascia: smooth pale plates with faint fibrous texture
+  float pfw = length(fwidth(vRest * 200.0));
+  float pn = c_vn(vRest * 60.0) * 0.6 + mix(0.5, c_vn(vRest * 200.0), 1.0 - smoothstep(0.3, 0.9, pfw)) * 0.4;
+  sH = mix(mh, 0.5 + 0.12 * (pn - 0.5), plate);
+  sweat = groove;
+  vec3 cGroove = vec3(0.1, 0.008, 0.006), cMus = vec3(0.4, 0.045, 0.03), cTop = vec3(0.86, 0.38, 0.32);
+  vec3 col = mix(cGroove, cMus, groove);
+  // pinkish-white highlights on the bulging bundles (anime-style muscle shading)
+  col = mix(col, cTop, smoothstep(0.7, 0.97, mh) * 0.55 * smoothstep(0.55, 0.95, sAO));
+  col *= 0.85 + 0.3 * c_vn(vRest * 18.0);
+  vec3 cPlate = mix(vec3(0.66, 0.5, 0.44), vec3(0.82, 0.72, 0.66), pn);
+  col = mix(col, cPlate, smoothstep(0.25, 0.75, plate));
+  col = mix(col, vec3(0.5, 0.12, 0.12) * (0.7 + 0.5 * groove), gum * 0.85);
+  // deep crimson in the creases between muscles
   float crease = clamp(1.0 - sAO, 0.0, 1.0);
-  // occlusion as warm, soft subsurface-red shadow (never grey/black strokes)
-  vec3 warm = vec3(0.6, 0.3, 0.2);
-  col = mix(col, col * warm, smoothstep(0.08, 0.9, crease) * 0.62 + smoothstep(-0.3, -0.9, cav) * 0.18);
-  col *= mix(0.68, 1.0, sAO);
-  col *= 1.0 - 0.72 * clamp(vMd2.w, 0.0, 1.0);
-  // orbital shading: soft warm shadow pooled around the squinting crescents
+  col = mix(col, col * vec3(0.45, 0.12, 0.1), smoothstep(0.1, 0.9, crease) * 0.7 + smoothstep(-0.3, -0.9, cav) * 0.2);
+  col *= mix(0.55, 1.0, sAO);
+  // sunken sockets: deep shadow around the small eyes
   float de = min(length((vRest - uEyeL) / uEyeRad), length((vRest - uEyeR) / uEyeRad));
-  sEye = 1.0 - smoothstep(0.45, 1.35, de);
-  col = mix(col, col * vec3(0.5, 0.3, 0.25), sEye * 0.6);
+  sEye = 1.0 - smoothstep(0.5, 1.3, de);
+  col = mix(col, col * vec3(0.06, 0.02, 0.02), sEye * 0.95);
   diffuseColor.rgb = col;
 }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-sweat = smoothstep(0.35, 0.75, c_vn(vRest * 26.0) * 0.7 + c_vn(vRest * 70.0) * 0.3);
-roughnessFactor = clamp(0.46 - 0.12 * sweat - 0.06 * sH - 0.16 * clamp(vMd2.x, 0.0, 1.0) - 0.2 * clamp(vMd.y, 0.0, 1.0) - 0.1 * sEye + 0.18 * (1.0 - sAO), 0.26, 0.8);`)
+roughnessFactor = clamp(0.35 * sEye + mix(mix(0.55, 0.4, sweat), 0.6, clamp(vMd.x, 0.0, 1.0)) - 0.15 * clamp(vMd.y, 0.0, 1.0) + 0.2 * (1.0 - sAO), 0.2, 0.85);`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
 {
   // specular occlusion: sweat highlights break across the forms instead of glazing the creases
@@ -112,7 +115,7 @@ roughnessFactor = clamp(0.46 - 0.12 * sweat - 0.06 * sH - 0.16 * clamp(vMd2.x, 0
 reflectedLight.indirectDiffuse *= 0.65;   // lower fill: stronger key-to-fill ratio on the flesh`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 {
-  vec2 dh = vec2(dFdx(sH), dFdy(sH)) * 0.14 * uPore;
+  vec2 dh = vec2(dFdx(sH), dFdy(sH)) * mix(0.9, 0.18, clamp(vMd.x, 0.0, 1.0)) * uPore * bW;
   normal = c_perturb(-vViewPosition, normal, dh, faceDirection);
 }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -122,7 +125,7 @@ reflectedLight.indirectDiffuse *= 0.65;   // lower fill: stronger key-to-fill ra
   float ndl = dot(normal, uSunDirV);
   // subsurface: light wrapping past the terminator, reddened
   float wrap = clamp((ndl + 0.3) / 1.3, 0.0, 1.0) - clamp(ndl, 0.0, 1.0);
-  totalEmissiveRadiance += diffuseColor.rgb * uSunCol * vec3(1.0, 0.36, 0.14) * wrap * 0.9 * sAO;
+  totalEmissiveRadiance += diffuseColor.rgb * uSunCol * vec3(1.0, 0.3, 0.2) * wrap * 0.6 * sAO;
   // backlit translucency on silhouettes (ears, fingers, nose)
   float back = pow(clamp(dot(-V, uSunDirV), 0.0, 1.0), 3.0);
   float rim = pow(1.0 - ndv, 2.5);
@@ -141,7 +144,7 @@ reflectedLight.indirectDiffuse *= 0.65;   // lower fill: stronger key-to-fill ra
   }
 }`);
   };
-  mat.customProgramCacheKey = () => 'giant-skin-v2';
+  mat.customProgramCacheKey = () => 'giant-muscle-v3';
   return mat;
 }
 
@@ -211,18 +214,18 @@ export function createEyeMaterial() {
   const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh;
   const g = cv.getContext('2d');
   const grd = g.createLinearGradient(0, 0, 0, Hh);
-  grd.addColorStop(0, '#020101'); grd.addColorStop(0.08, '#0a0604');
-  grd.addColorStop(0.12, '#2a1a10'); grd.addColorStop(0.2, '#3b2616'); grd.addColorStop(0.24, '#120a06');
-  grd.addColorStop(0.28, '#b9a58e'); grd.addColorStop(0.7, '#cdb9a0'); grd.addColorStop(1, '#8a5a4a');
+  grd.addColorStop(0, '#020101'); grd.addColorStop(0.1, '#070403');
+  grd.addColorStop(0.16, '#1c120c'); grd.addColorStop(0.22, '#0c0705');
+  grd.addColorStop(0.27, '#5a4a40'); grd.addColorStop(0.6, '#6a5648'); grd.addColorStop(1, '#3a2018');
   g.fillStyle = grd; g.fillRect(0, 0, W, Hh);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  return new THREE.MeshPhysicalMaterial({ map: tex, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.04 });
+  return new THREE.MeshPhysicalMaterial({ map: tex, color: 0x5a4a44, roughness: 0.45, clearcoat: 0.35, clearcoatRoughness: 0.2 });
 }
 
 export function createTeethMaterial() {
-  const m = new THREE.MeshStandardMaterial({ color: 0xf2e8d6, roughness: 0.42, metalness: 0, vertexColors: true, envMapIntensity: 0.25 });
-  m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * vec3(0.22, 0.2, 0.18);'); };
+  const m = new THREE.MeshStandardMaterial({ color: 0xc9b48e, roughness: 0.48, metalness: 0, vertexColors: true, envMapIntensity: 0.2 });
+  m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * vec3(0.06, 0.05, 0.04);'); };
   return m;
 }
 

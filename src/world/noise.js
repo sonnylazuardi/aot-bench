@@ -31,7 +31,7 @@ export function makeNoiseTexture(size = 512) {
   const t = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
-  t.anisotropy = 4;
+  t.anisotropy = 8;
   t.colorSpace = THREE.NoColorSpace;
   t.needsUpdate = true;
   return t;

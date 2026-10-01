@@ -480,3 +480,21 @@
 .bmk.edge .d { display: block; position: absolute; left: 50%; top: calc(var(--s) * 1.1); transform: translateX(-50%); white-space: nowrap; }
 .bmk .ic { width: calc(var(--s) * 1.8); height: calc(var(--s) * 1.8); }
 .mk { transition: opacity .18s; }
+
+/* ---- legibility floor (critic r4 + bright day sky): soft dark scrims behind the text panels, idle gear never below 70% */
+.obj::before, .gear::before { content: ''; position: absolute; z-index: -1; pointer-events: none;
+  left: -30%; top: -35%; right: -45%; bottom: -35%; background: radial-gradient(closest-side, rgba(0,0,0,.45), rgba(0,0,0,.28) 55%, rgba(0,0,0,0)); }
+.obj, .gear { isolation: isolate; }
+.gear.idle { opacity: .7; }
+.obj small, .obj b, .obj .line, .gear .gasrow, .boss .nm b, .boss .ft, .boss .ph { text-shadow: -1px -1px 0 rgba(0,0,0,.6), 1px 1px 0 rgba(0,0,0,.6), 0 1px 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.5); }
+.boss::before { content: ''; position: absolute; z-index: -1; pointer-events: none; left: -8%; right: -8%; top: -35%; bottom: -40%; background: radial-gradient(closest-side, rgba(0,0,0,.32), rgba(0,0,0,0)); }
+.boss { isolation: isolate; }
+
+/* ---- steam-blast warning: red-white heat edges with a shimmer band (opacity/transform only) */
+.steamov { background: radial-gradient(ellipse 78% 72% at 50% 50%, rgba(255,255,255,0) 50%, rgba(255,214,200,.28) 74%, rgba(255,90,70,.5) 92%, rgba(255,240,235,.75) 100%); }
+.steamov .sh { position: absolute; inset: -10%; background: repeating-linear-gradient(0deg, rgba(255,255,255,0) 0 18px, rgba(255,235,225,.10) 22px, rgba(255,255,255,0) 30px);
+  -webkit-mask: radial-gradient(ellipse 70% 65% at 50% 50%, transparent 55%, #000 85%); mask: radial-gradient(ellipse 70% 65% at 50% 50%, transparent 55%, #000 85%); }
+.steamov.on .sh { animation: aotHeat .9s linear infinite; }
+.steamov.on { animation: aotHeatPulse .5s ease-in-out infinite alternate; }
+@keyframes aotHeat { from { transform: translateY(0); } to { transform: translateY(-30px); } }
+@keyframes aotHeatPulse { from { filter: none; } to { filter: brightness(1.15); } }

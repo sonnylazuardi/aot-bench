@@ -6,7 +6,8 @@
     "dev": "vite --port 5190 --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --port 4173 --host 127.0.0.1",
-    "shot": "node tools/shot.mjs"
+    "shot": "node tools/shot.mjs",
+    "deploy": "npm run build && npx wrangler pages deploy dist --project-name=aot-shiganshina"
   },
   "dependencies": {
     "n8ao": "^2.0.1",

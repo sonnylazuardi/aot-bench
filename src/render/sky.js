@@ -5,7 +5,7 @@
 // and moods ('golden' | 'smoke' | 'dusk') that blend over a few seconds.
 import * as THREE from 'three';
 import { SunLight } from 'three/addons/lights/SunLight.js';
-import { computeSkyLUT, sampleLUT, LUT_W, LUT_H, makeSharedUniforms, GLSL_SKY_PARS, FOG_CHUNKS } from './atmos.js';
+import { computeSkyLUT, sampleLUT, sunTransmittanceFast, LUT_W, LUT_H, makeSharedUniforms, GLSL_SKY_PARS, FOG_CHUNKS } from './atmos.js';
 import { FSPass, makeRT, GLSL_HASH } from './common.js';
 
 // ------------------------------------------------------------------------------------------------------------
@@ -62,6 +62,8 @@ uniform vec4 uCloudC;   // x ambient gain, y fade km, z cirrus, w base darkening
 uniform vec3 uCloudOff; // km wind offset
 uniform vec4 uCloudD;   // x albedo, y fire belly glow, z lightning flash, w density boost
 uniform vec3 uCloudFlashP; // flash position (km, cloud space)
+uniform vec4 uCloudE;   // rgb belly tint, w horizon stacking boost
+uniform vec4 uCloudF;   // x isotropic multi-scatter (whiteness), yz camera xz (km)
 #define C_RG 6360.0
 float cRemap(float v, float a, float b, float c, float d) { return c + (v - a) / (b - a) * (d - c); }
 vec2 cSphere(vec3 ro, vec3 rd, float r) {
@@ -76,7 +78,8 @@ float cloudCov(vec3 q) {
 }
 float cloudD(vec3 p, float hf, int lod) {
   vec3 q = p + uCloudOff;
-  float cov = cloudCov(q);
+  // towering stacks crowd toward the horizon (far from the camera)
+  float cov = clamp(cloudCov(q) + uCloudE.w * smoothstep(9.0, 40.0, length(p.xz - uCloudF.yz)), 0.0, 1.0);
   if (cov < 0.02) return 0.0;
   // cumulus profile: flat dark bases, rounded cauliflower tops, taller where coverage is high
   float topF = mix(0.25, 1.0, cov);
@@ -95,7 +98,7 @@ float cloudD(vec3 p, float hf, int lod) {
   return clamp(d, 0.0, 1.0) * uCloudA.w * uCloudD.w;
 }
 float cPhase(float mu, float k) {
-  return mix(aotHG(mu, 0.8 * k), aotHG(mu, -0.2 * k), 0.25) + 0.02;
+  return mix(aotHG(mu, 0.8 * k), aotHG(mu, -0.2 * k), 0.25) + uCloudF.x;
 }
 vec4 aotCirrus(vec3 ro, vec3 rd) {
   if (uCloudC.z <= 0.0 || rd.y < 0.0) return vec4(0.0, 0.0, 0.0, 1.0);
@@ -149,7 +152,7 @@ vec4 aotClouds(vec3 camM, vec3 rd, float jit, float nSteps) {
       float powder = 1.0 - 0.45 * exp(-d * SIG * 0.06);
       vec3 sunL = uAotSunCol * ms * powder * uCloudB.w;
       float hk = clamp(hf, 0.0, 1.0);
-      vec3 amb = mix(ambBot, ambTop, hk) * mix(1.0, 0.3 + 0.7 * smoothstep(0.0, 0.5, hk), uCloudC.w);
+      vec3 amb = mix(ambBot * uCloudE.rgb, ambTop, hk) * mix(1.0, 0.3 + 0.7 * smoothstep(0.0, 0.5, hk), uCloudC.w);
       float sig = d * SIG;
       float Ts = exp(-sig * dt);
       vec3 S = (sunL + amb) * uCloudD.x;
@@ -314,54 +317,84 @@ void main() {
 const BASE = {
   inf: 0, fire: 0, fireCol: [1.0, 0.36, 0.1], cloudBot: 1.35, cloudTop: 3.8, cloudAlb: 1.0, cloudFire: 0, cloudDens: 1.0,
   embers: 0, lightning: 0, sunDisc: 1.0, bloom: 1.0, cloudScale: 0.14, expo: 1.0, contrast: 0, shafts: 1, cirrus: 0.5,
+  sunEl: 16.3, sat: 1.0, skyTint2: [1, 1, 1], cloudBelly: [1, 1, 1], cloudStack: 0.15, cloudIso: 0.025, erode: 0.72,
 };
 const MOODS = {
+  // battle phase 1: vivid saturated blue, crisp sunlit white cumulus, strong clean sun, clear air
+  day: {
+    ...BASE,
+    sunEl: 36, sunK: 1.1, sunTint: [0.97, 1.0, 1.08], skyK: 1.0, skyTint: [0.8, 0.96, 1.25], skyTint2: [0.86, 1.04, 1.12], aureole: 0.3, smoke: 0,
+    haze: 1 / 26000, hazeFall: 1 / 1600, dust: 1 / 7000, dustFall: 1 / 35, dustTint: [0.82, 0.9, 1.0],
+    sunScat: 0.5, dustSun: 0.5, cov: 0.38, cloudSun: 3.4, cloudAmb: 1.15, hemi: 1.0, env: 1.05,
+    glow: [1.0, 0.88, 0.7], smokeCol: [0.22, 0.2, 0.2], cloudBelly: [0.78, 0.9, 1.18], cloudStack: 0.34, cloudIso: 0.06, erode: 0.82,
+    cloudBot: 1.1, cloudTop: 3.6, cloudDens: 2.4, cloudScale: 0.17, cirrus: 0.25, expo: 1.0, contrast: 0.1, bloom: 0.85, shafts: 0.45, sat: 1.24,
+  },
+  // calm intro + battle phase 2: warm late sun
   golden: {
     ...BASE,
     sunK: 1.0, sunTint: [1, 1, 1], skyK: 1.0, skyTint: [1, 1, 1], aureole: 1.0, smoke: 0,
-    haze: 1 / 15000, hazeFall: 1 / 1500, dust: 1 / 2600, dustFall: 1 / 45, dustTint: [0.92, 0.8, 0.64],
-    sunScat: 1.0, dustSun: 1.0, cov: 0.34, cloudSun: 2.0, cloudAmb: 1.0, hemi: 1.0, env: 1.0,
-    glow: [1.0, 0.55, 0.25], smokeCol: [0.22, 0.18, 0.15],
+    haze: 1 / 15000, hazeFall: 1 / 1500, dust: 1 / 3200, dustFall: 1 / 45, dustTint: [0.92, 0.8, 0.64],
+    sunScat: 1.0, dustSun: 1.0, cov: 0.36, cloudSun: 2.0, cloudAmb: 1.0, hemi: 1.0, env: 1.0,
+    glow: [1.0, 0.55, 0.25], smokeCol: [0.22, 0.18, 0.15], cloudDens: 1.3, cloudScale: 0.16, sat: 1.1,
+  },
+  // battle phase 3: soft pink / peach / lavender sky, luminous layered clouds, pastel aerial perspective
+  afternoon: {
+    ...BASE,
+    sunEl: 11, sunK: 0.88, sunTint: [1.0, 0.78, 0.74], skyK: 0.95, skyTint: [1.2, 0.76, 1.08], skyTint2: [1.42, 0.84, 0.86], aureole: 1.7, smoke: 0,
+    haze: 1 / 6000, hazeFall: 1 / 1200, dust: 1 / 2600, dustFall: 1 / 70, dustTint: [1.0, 0.8, 0.9],
+    sunScat: 1.7, dustSun: 1.3, cov: 0.32, cloudSun: 2.3, cloudAmb: 1.2, hemi: 0.95, env: 1.0,
+    glow: [1.0, 0.56, 0.46], smokeCol: [0.22, 0.17, 0.18], cloudBelly: [1.65, 0.7, 0.92], cloudStack: 0.2, cloudIso: 0.05,
+    cloudBot: 1.6, cloudTop: 2.7, cloudDens: 1.0, cloudScale: 0.13, cirrus: 0.9, expo: 1.06, contrast: -0.04, bloom: 1.3, shafts: 0.8, sat: 1.15,
   },
   smoke: {
     ...BASE,
-    sunK: 0.78, sunTint: [1.0, 0.86, 0.7], skyK: 0.82, skyTint: [1.0, 0.93, 0.84], aureole: 1.35, smoke: 0.8,
-    haze: 1 / 9000, hazeFall: 1 / 1100, dust: 1 / 1500, dustFall: 1 / 70, dustTint: [0.86, 0.7, 0.52],
-    sunScat: 1.4, dustSun: 1.2, cov: 0.42, cloudSun: 1.6, cloudAmb: 0.85, hemi: 0.9, env: 0.85,
-    glow: [1.0, 0.45, 0.16], smokeCol: [0.2, 0.15, 0.12], inf: 0.25, fire: 0.25, embers: 0.35, cloudFire: 0.2,
+    sunK: 0.8, sunTint: [1.0, 0.88, 0.74], skyK: 0.85, skyTint: [1.0, 0.94, 0.86], aureole: 1.3, smoke: 0.5,
+    haze: 1 / 9000, hazeFall: 1 / 1100, dust: 1 / 1800, dustFall: 1 / 60, dustTint: [0.86, 0.72, 0.56],
+    sunScat: 1.4, dustSun: 1.2, cov: 0.42, cloudSun: 1.7, cloudAmb: 0.9, hemi: 0.9, env: 0.85,
+    glow: [1.0, 0.45, 0.16], smokeCol: [0.2, 0.15, 0.12],
   },
   dusk: {
     ...BASE,
-    sunK: 0.5, sunTint: [1.0, 0.72, 0.48], skyK: 0.55, skyTint: [0.92, 0.82, 0.9], aureole: 1.6, smoke: 0.35,
-    haze: 1 / 9000, hazeFall: 1 / 1300, dust: 1 / 1500, dustFall: 1 / 60, dustTint: [0.8, 0.62, 0.5],
-    sunScat: 1.8, dustSun: 1.6, cov: 0.38, cloudSun: 1.5, cloudAmb: 0.7, hemi: 0.7, env: 0.7,
-    glow: [1.0, 0.38, 0.14], smokeCol: [0.16, 0.12, 0.11],
+    sunEl: 7, sunK: 0.55, sunTint: [1.0, 0.72, 0.5], skyK: 0.6, skyTint: [0.92, 0.82, 0.92], aureole: 1.6, smoke: 0,
+    haze: 1 / 9000, hazeFall: 1 / 1300, dust: 1 / 2500, dustFall: 1 / 60, dustTint: [0.8, 0.64, 0.56],
+    sunScat: 1.8, dustSun: 1.5, cov: 0.36, cloudSun: 1.5, cloudAmb: 0.75, hemi: 0.75, env: 0.75,
+    glow: [1.0, 0.4, 0.18], smokeCol: [0.16, 0.12, 0.11],
   },
-  // after the breach: smoke-choked orange/red sky, fire-lit smoke deck, blood-orange sun, embers, lightning
-  inferno: {
-    ...BASE,
-    sunK: 0.62, sunTint: [1.0, 0.52, 0.26], skyK: 0.7, skyTint: [0.82, 0.86, 1.0], aureole: 0.8, smoke: 0.25,
-    haze: 1 / 14000, hazeFall: 1 / 900, dust: 1 / 1800, dustFall: 1 / 22, dustTint: [0.55, 0.42, 0.34],
-    sunScat: 1.1, dustSun: 0.8, cov: 0.38, cloudSun: 1.0, cloudAmb: 0.25, hemi: 0.3, env: 0.32,
-    glow: [1.0, 0.3, 0.08], smokeCol: [0.07, 0.06, 0.06],
-    inf: 0.92, fire: 1.25, fireCol: [1.0, 0.28, 0.06], cloudBot: 0.45, cloudTop: 2.4, cloudAlb: 0.12, cloudFire: 1.1, cloudDens: 3.0,
-    cloudScale: 0.21, embers: 1.0, lightning: 1.0, sunDisc: 0.025, bloom: 1.0, expo: 0.9, contrast: 0.12, shafts: 0.0, cirrus: 0,
-  },
-
 };
+MOODS.inferno = MOODS.day; // user direction 21:15: no burning sky in battle
 
 export async function create(ctx) {
   const { renderer, scene, LAYOUT } = ctx;
   const qlevel = ctx.quality?.level || 'high';
 
   // ---- sun + atmosphere LUT -------------------------------------------------------------------------------
+  // sun azimuth is fixed (south, behind the outer gate); elevation follows the mood (high clear 'day' sun ->
+  // low warm 'golden'/'afternoon' sun). Two sky-view LUTs are baked at load and blended on the CPU when it moves.
   const sunDir = new THREE.Vector3(...LAYOUT.sunDir).normalize();
-  const sunEl = Math.asin(sunDir.y);
+  const sunAz = new THREE.Vector2(sunDir.x, sunDir.z).normalize();
+  const LOW_EL = Math.asin(sunDir.y), HIGH_EL = THREE.MathUtils.degToRad(36);
+  const MIE_LOW = 1.8, MIE_HIGH = 0.75;
   const E0 = 6.0; // sun illuminance at the top of the atmosphere (scene units)
-  const { data, sunT } = computeSkyLUT(sunEl, { mie: 1.8, ms: 1.0, groundAlbedo: 0.18 });
+  const lutLow = computeSkyLUT(LOW_EL, { mie: MIE_LOW, ms: 1.0, groundAlbedo: 0.18 }).data;
+  const lutHigh = computeSkyLUT(HIGH_EL, { mie: MIE_HIGH, ms: 1.0, groundAlbedo: 0.18 }).data;
+  const data = new Float32Array(lutLow.length);
   const half = new Uint16Array(data.length);
-  for (let i = 0; i < data.length; i++) half[i] = THREE.DataUtils.toHalfFloat(data[i]);
-  const lutTex = new THREE.DataTexture(half, LUT_W, LUT_H, THREE.RGBAFormat, THREE.HalfFloatType);
+  const sunT = [1, 1, 1], tA = [0, 0, 0], tB = [0, 0, 0];
+  let lutW = -1, sunElNow = LOW_EL, lutTex = null;
+  function setSunElevation(el) {
+    sunElNow = el;
+    sunDir.set(sunAz.x * Math.cos(el), Math.sin(el), sunAz.y * Math.cos(el));
+    const w = THREE.MathUtils.clamp((el - LOW_EL) / (HIGH_EL - LOW_EL), 0, 1);
+    sunTransmittanceFast(el, MIE_LOW, tA); sunTransmittanceFast(el, MIE_HIGH, tB);
+    for (let c = 0; c < 3; c++) sunT[c] = tA[c] + (tB[c] - tA[c]) * w;
+    if (Math.abs(w - lutW) > 0.02 || (w !== lutW && (w === 0 || w === 1))) {
+      lutW = w;
+      for (let i = 0; i < data.length; i++) { const v = lutLow[i] + (lutHigh[i] - lutLow[i]) * w; data[i] = v; half[i] = THREE.DataUtils.toHalfFloat(v); }
+      if (lutTex) lutTex.needsUpdate = true;
+    }
+  }
+  setSunElevation(LOW_EL);
+  lutTex = new THREE.DataTexture(half, LUT_W, LUT_H, THREE.RGBAFormat, THREE.HalfFloatType);
   lutTex.minFilter = lutTex.magFilter = THREE.LinearFilter;
   lutTex.wrapS = lutTex.wrapT = THREE.ClampToEdgeWrapping;
   lutTex.colorSpace = THREE.NoColorSpace;
@@ -373,6 +406,13 @@ export async function create(ctx) {
 
   // ---- patch three's fog chunks + give every built-in material the shared uniforms -------------------------
   Object.assign(THREE.ShaderChunk, FOG_CHUNKS);
+  // stable soft shadows: r186 PCF rotates its Vogel disk by per-pixel screen noise (IGN) with no temporal filter, which
+  // crawls / sparkles as soon as the camera shakes. Use a fixed rotation (stable) with a few more taps instead.
+  {
+    let sc = THREE.ShaderChunk.shadowmap_pars_fragment;
+    sc = sc.replace(/float phi = interleavedGradientNoise\( gl_FragCoord\.xy \) \* PI2;/g, 'float phi = 0.7853981;');
+    THREE.ShaderChunk.shadowmap_pars_fragment = sc;
+  }
   for (const k of Object.keys(THREE.ShaderLib)) {
     const u = THREE.ShaderLib[k].uniforms;
     if (u && 'fogColor' in u) Object.assign(u, U);
@@ -389,9 +429,13 @@ export async function create(ctx) {
   const smap = qlevel === 'high' ? 2048 : qlevel === 'medium' ? 1536 : 1024; // per cascade (atlas is 2x1)
   sun.shadow.mapSize.set(smap, smap);
   sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = qlevel === 'high' ? 0.06 : 0.12;
-  sun.shadow.radius = qlevel === 'low' ? 1.5 : 2.5;
+  sun.shadow.normalBias = qlevel === 'high' ? 0.16 : 0.24; // far cascade texels are ~0.3-0.7 m: small biases acne/crawl
+  sun.shadow.radius = qlevel === 'low' ? 1.0 : 1.6;
   sun.shadow.camera.near = 1;
+  // note: in r186 WebGLShadowMap layer-tests casters against the MAIN view camera, not these cascade cameras, so this
+  // is harmless but not relied on; shadow-only proxies should stay on layer 0 with colorWrite/depthWrite false
+  sun.shadow.camera.layers.enable(1);
+  for (let i = 0; i < 2; i++) sun.shadow.getCamera?.(i)?.layers?.enable(1);
   sun.shadow.camera.far = 420;
   sun.target = new THREE.Object3D(); // compatibility with DirectionalLight-style code (SunLight shines toward the origin)
   scene.add(sun);
@@ -420,6 +464,8 @@ export async function create(ctx) {
     uCloudOff: { value: new THREE.Vector3(3.3, 0, 11.7) },
     uCloudD: { value: new THREE.Vector4(1, 0, 0, 1) },
     uCloudFlashP: { value: new THREE.Vector3(0, 6361, 0) },
+    uCloudE: { value: new THREE.Vector4(1, 1, 1, 0) },
+    uCloudF: { value: new THREE.Vector4(0.02, 0, 0, 0) },
   };
 
   // half-res cloud pass with temporal accumulation
@@ -493,6 +539,11 @@ export async function create(ctx) {
 
   function applyMood() {
     const m = cur;
+    const el = THREE.MathUtils.degToRad(m.sunEl);
+    if (Math.abs(el - sunElNow) > 1e-4) {
+      setSunElevation(el);
+      U.uAotSunDir.value.copy(sunDir); sun.position.copy(sunDir);
+    }
     // sun light: top-of-atmosphere illuminance x transmittance x mood
     const r = E0 * sunT[0] * m.sunK * m.sunTint[0], g = E0 * sunT[1] * m.sunK * m.sunTint[1], b = E0 * sunT[2] * m.sunK * m.sunTint[2];
     U.uAotSunCol.value.set(r, g, b);
@@ -502,6 +553,10 @@ export async function create(ctx) {
     sunColor.setRGB(r, g, b);
     U.uAotSkyK.value.set(E0 * m.skyK, m.aureole, m.smoke, 0);
     U.uAotSkyTint.value.fromArray(m.skyTint);
+    U.uAotSkyTint2.value.fromArray(m.skyTint2);
+    cloudU.uCloudE.value.set(m.cloudBelly[0], m.cloudBelly[1], m.cloudBelly[2], m.cloudStack);
+    cloudU.uCloudF.value.x = m.cloudIso;
+    cloudU.uCloudB.value.z = m.erode;
     U.uAotGlowCol.value.fromArray(m.glow);
     U.uAotSmokeCol.value.fromArray(m.smokeCol).multiplyScalar(E0 * 0.12 * m.skyK);
     U.uAotFogA.value.set(m.haze, m.hazeFall, m.dust, m.dustFall);
@@ -514,7 +569,7 @@ export async function create(ctx) {
     U.uAotInf.value.x = m.inf; U.uAotInf.value.y = m.fire;
     U.uAotFireCol.value.fromArray(m.fireCol);
     domeMat.uniforms.uSunDisc.value.set(0.0105, 22 * m.sunDisc, 0.3 * m.sunDisc, 0);
-    api && (api.embers = m.embers, api.bloomK = m.bloom, api.exposureK = m.expo, api.contrastK = m.contrast, api.shaftsK = m.shafts);
+    api && (api.embers = m.embers, api.bloomK = m.bloom, api.exposureK = m.expo, api.contrastK = m.contrast, api.shaftsK = m.shafts, api.satK = m.sat);
     cloudU.uCloudB.value.w = m.cloudSun;
     cloudU.uCloudC.value.x = m.cloudAmb;
     // hemisphere fill from the LUT (zenith sky / warm ground bounce)
@@ -522,7 +577,7 @@ export async function create(ctx) {
     const sk = E0 * m.skyK;
     zenithColor.setRGB(tmp3[0] * sk * m.skyTint[0], tmp3[1] * sk * m.skyTint[1], tmp3[2] * sk * m.skyTint[2]);
     sampleLUT(data, tv.set(-sunDir.x, 0.05, -sunDir.z).normalize(), sunDir, tmp3);
-    horizonColor.setRGB(tmp3[0] * sk * m.skyTint[0], tmp3[1] * sk * m.skyTint[1], tmp3[2] * sk * m.skyTint[2]);
+    horizonColor.setRGB(tmp3[0] * sk * m.skyTint2[0], tmp3[1] * sk * m.skyTint2[1], tmp3[2] * sk * m.skyTint2[2]);
     const zl = Math.max(zenithColor.r, zenithColor.g, zenithColor.b) || 1;
     hemi.color.copy(zenithColor).multiplyScalar(1 / zl);
     hemi.groundColor.setRGB(0.55 * sunColor.r / mx, 0.45 * sunColor.g / mx, 0.34 * sunColor.b / mx);
@@ -532,7 +587,7 @@ export async function create(ctx) {
   applyMood();
   bakeEnv();
 
-  const wind = new THREE.Vector3(3.2, 0, -1.4);
+  const wind = new THREE.Vector3(4.2, 0, 0.8); // crosswind, slightly outward: town smoke leans off the gate->town sightline
 
   // shadow distance follows camera height (from the rooftops you see the whole town)
   const camPos = new THREE.Vector3();
@@ -588,7 +643,7 @@ export async function create(ctx) {
   }
 
   api = {
-    embers: cur.embers, bloomK: cur.bloom, exposureK: cur.expo, contrastK: cur.contrast, shaftsK: cur.shafts,
+    embers: cur.embers, bloomK: cur.bloom, exposureK: cur.expo, contrastK: cur.contrast, shaftsK: cur.shafts, satK: cur.sat,
     /** trigger an in-cloud lightning strike now (cinematics) */
     strike(opts) { strike(ctx.camera, opts); },
     _debug: { noise: nt, cloudU, get cloudRT() { return cloudRT; }, cloudPass, domeMat, cur, applyMood, bakeEnv },
@@ -615,6 +670,7 @@ export async function create(ctx) {
       u.uInvProj.value.copy(camera.projectionMatrixInverse);
       u.uCamWorld.value.copy(camera.matrixWorld);
       u.uCamPos.value.copy(camPos);
+      cloudU.uCloudF.value.y = camPos.x * 0.001; cloudU.uCloudF.value.z = camPos.z * 0.001;
       curVP.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       const jumped = lastCamPos.distanceToSquared(camPos) > 60 * 60;
       lastCamPos.copy(camPos);
@@ -654,10 +710,15 @@ export async function create(ctx) {
     },
   };
 
-  // breach -> the sky chokes with smoke over ~20 s
-  ctx.events?.on?.('wall:breached', () => api.setMood('inferno', 20));
-  // skip=1 / fight start without a breach event: make sure the boss fight is under the burning sky
-  ctx.events?.on?.('fight:start', () => { if (moodName !== 'inferno') api.setMood('inferno', 2.5); });
+  // mood script (user direction 21:15): calm golden intro -> clear blue 'day' after the breach / at fight start,
+  // warming to 'golden' in phase 2 and a pink 'afternoon' in phase 3
+  ctx.events?.on?.('wall:breached', () => api.setMood('day', 8));
+  ctx.events?.on?.('fight:start', () => { if (moodName !== 'day') api.setMood('day', 2.5); });
+  ctx.events?.on?.('colossal:phase', (e) => {
+    const ph = e?.phase | 0;
+    if (ph === 2) api.setMood('golden', 20);
+    else if (ph >= 3) api.setMood('afternoon', 20);
+  });
   if (ctx.params?.mood && MOODS[ctx.params.mood]) api.setMood(ctx.params.mood, 0);
   return api;
 }

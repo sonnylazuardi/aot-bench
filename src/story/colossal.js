@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { buildSkeletonDefs, teethLayout, EYES, HEAD_C, H, EYE_X } from './colossalBody.js';
 import { createSkinMaterial, createHairMaterial, createEyeMaterial, createTeethMaterial, updateLightingUniforms } from './muscleMaterial.js';
-import { buildPartArrays, PARTS, BUILD_VERSION } from './colossalBuild.js';
+import { buildPartArrays, PARTS, SHADOW_PARTS, BUILD_VERSION } from './colossalBuild.js';
 import { createRig } from './colossalRig.js';
 import { createBrain } from './colossalBrain.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -30,11 +30,12 @@ const idbGet = (db, k) => new Promise((res) => { try { const q = db.transaction(
 const idbPut = (db, k, v) => { try { db.transaction('parts', 'readwrite').objectStore('parts').put(v, k); } catch {} };
 async function buildAll(quality) {
   const q = quality === 'low' ? 1.35 : quality === 'medium' ? 1.12 : 1;
-  const Q = { body: 1.35 * q, head: 1.38 * q, handL: 1.15 * q, handR: 1.15 * q, hair: 1.75 * q };
+  const Q = { body: 1.2 * q, head: 1.12 * q, handL: 1.1 * q, handR: 1.1 * q, hair: 1.75 * q };
+  for (const n of SHADOW_PARTS) Q[n] = Q[n.slice(0, -2)] * 3;
   const dev = !!import.meta.env?.DEV;
   const db = dev ? null : await idb();   // dev: the bake server is always fresh; IDB (keyed by BUILD_VERSION) could be stale
   const out = {};
-  await Promise.all(PARTS.map(async (name) => {
+  await Promise.all([...PARTS, ...SHADOW_PARTS].map(async (name) => {
     try { const baked = await fetchBaked('colossal', [name, Q[name]]); if (baked && baked.index) { out[name] = baked; return; } } catch {}
     const key = `${BUILD_VERSION}:${name}:${Q[name].toFixed(3)}`;
     if (db) { const c = await idbGet(db, key); if (c && c.index) { out[name] = c; return; } }
@@ -100,10 +101,10 @@ export async function create(ctx) {
 
   // ---------- meshes ----------
   const arrays = await (pre || buildAll(ctx.quality?.level));
-  const skin = createSkinMaterial(new THREE.Vector3(...H(EYE_X, -0.014, 0.084)), new THREE.Vector3(...H(-EYE_X, -0.014, 0.084)), new THREE.Vector3(0.036, 0.021, 0.03).multiplyScalar(1.14));
+  const skin = createSkinMaterial(new THREE.Vector3(...H(0.032, -0.014, 0.08)), new THREE.Vector3(...H(-0.032, -0.014, 0.08)), new THREE.Vector3(0.036, 0.027, 0.04).multiplyScalar(1.08));
   const hairMat = createHairMaterial(H(0, -0.12, 0)[1]);
   const heroFog = (m, k = 0.4) => { m.defines = { ...(m.defines || {}), AOT_FOG_K: k }; m.needsUpdate = true; return m; };
-  heroFog(skin); heroFog(hairMat);
+  heroFog(skin, 0.5); heroFog(hairMat);
   const mats = [skin, hairMat];
   const meshes = [];
   let tris = 0;
@@ -111,24 +112,51 @@ export async function create(ctx) {
     const a = arrays[name]; if (!a) continue;
     const g = toGeometry(a);
     const m = new THREE.SkinnedMesh(g, name === 'hair' ? hairMat : skin);
-    m.name = 'giant_' + name; m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false;
+    m.name = 'giant_' + name; m.castShadow = false; m.receiveShadow = true; m.frustumCulled = false;
     root.add(m);
     m.bind(skeleton);
     meshes.push(m);
     tris += g.index.count / 3;
   }
+  // shadow casters: coarse proxies (colorWrite/depthWrite off -> invisible in the main pass; three tests shadow casters
+  // against the MAIN camera's layers, so they must stay on layer 0). They sit just inside the skin.
+  const SHADOW_LAYER = 1;
+  const proxyMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+  const shadowProxies = [];
+  let shadowTris = 0;
+  for (const name of SHADOW_PARTS) {
+    const a = arrays[name]; if (!a) continue;
+    const m = new THREE.SkinnedMesh(toGeometry(a), proxyMat);
+    m.name = 'giant_shadow_' + name; m.castShadow = true; m.receiveShadow = false; m.frustumCulled = false;
+    root.add(m); m.bind(skeleton);
+    shadowProxies.push(m); shadowTris += m.geometry.index.count / 3;
+  }
+  const enableShadowLayer = () => {
+    let found = 0;
+    scene.traverse((o) => {
+      if (!o.isLight || !o.castShadow || !o.shadow) return;
+      const sh = o.shadow;
+      sh.camera?.layers.enable(SHADOW_LAYER);
+      // cascaded sun: each cascade renders with its own camera (shadow.getCamera(i) / shadow._cameras)
+      for (let i = 0; i < 8; i++) { let c = null; try { c = sh.getCamera?.(i); } catch { c = null; } if (c?.layers) c.layers.enable(SHADOW_LAYER); }
+      if (Array.isArray(sh._cameras)) for (const c of sh._cameras) c?.layers?.enable(SHADOW_LAYER);
+      found++;
+    });
+    return found;
+  };
+  if (!shadowProxies.length) for (const m of meshes) if (m.name !== 'giant_hair') m.castShadow = true; // no proxies: hi-res casts
   // teeth: flat human teeth, clenched in the grin
   const teethMat = heroFog(createTeethMaterial());
   const toothGeos = { up: [], lo: [] };
   const headBP = bindPos('head'), jawBP = bindPos('jaw');
   for (const t of teethLayout()) {
-    const g = new RoundedBoxGeometry(t.w * 0.93, t.h, 0.0085 * 1.14, 2, Math.min(0.0022, t.w * 0.2));
+    const g = new RoundedBoxGeometry(t.w * 0.9, t.h, 0.007, 2, Math.min(0.0016, t.w * 0.2));
     const pos = g.attributes.position, cols = [];
     for (let i = 0; i < pos.count; i++) {
       const y = pos.getY(i);
       const fromRoot = t.upper ? (0.5 - y / t.h) : (0.5 + y / t.h);
       pos.setZ(i, pos.getZ(i) * (1 - 0.3 * fromRoot));
-      const k = 0.7 + 0.3 * sstep(0.0, 0.45, fromRoot);
+      const k = 0.42 + 0.58 * sstep(0.0, 0.55, fromRoot);
       const stain = 0.92 + 0.08 * Math.sin(t.i * 3.1 + (t.upper ? 1 : 2));
       cols.push(0.92 * k * stain, 0.86 * k * stain, 0.74 * k);
     }
@@ -141,7 +169,7 @@ export async function create(ctx) {
   }
   const teethUp = new THREE.Mesh(mergeGeometries(toothGeos.up), teethMat);
   const teethLo = new THREE.Mesh(mergeGeometries(toothGeos.lo), teethMat);
-  for (const m of [teethUp, teethLo]) { m.castShadow = true; m.frustumCulled = false; }
+  for (const m of [teethUp, teethLo]) { m.castShadow = false; m.frustumCulled = false; }
   bone('head').add(teethUp); bone('jaw').add(teethLo);
   // mouth interior: dark gullet so gaps between teeth read black, not see-through
   const gullet = new THREE.Mesh(new THREE.SphereGeometry(0.045 * 1.14, 20, 14), heroFog(new THREE.MeshStandardMaterial({ color: 0x1a0504, roughness: 0.6 })));
@@ -152,21 +180,7 @@ export async function create(ctx) {
   tongue.scale.set(1.2, 0.35, 1.3);
   tongue.position.copy(new THREE.Vector3(...H(0, -0.118, 0.055)).sub(jawBP));
   bone('jaw').add(tongue);
-  // dark lash lines along the squinting slits (the crescent 'happy' eyes read from far away)
-  const lashMat = heroFog(new THREE.MeshStandardMaterial({ color: 0x2a140c, roughness: 0.6 }));
-  const glintMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.45, 1.3), transparent: true, opacity: 0.85, depthWrite: false });
-  for (const sd of [1, -1]) {
-    const pts = [];
-    for (let i = 0; i <= 16; i++) { const u = -1 + i / 8; pts.push(new THREE.Vector3(...H(EYE_X * sd + u * 0.023 * sd, -0.0135 + 0.0068 * (1 - u * u) + 0.002 * u + 0.0036 * (1 - 0.5 * u * u), 0.0935 - 0.006 * u * u)).sub(headBP)); }
-    const tg = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.0016 * 1.14, 6, false);
-    // wet glint in the slit
-    const gl = new THREE.Mesh(new THREE.SphereGeometry(0.0024 * 1.14, 8, 6), glintMat);
-    gl.position.copy(new THREE.Vector3(...H(EYE_X * sd - 0.004 * sd, -0.0105, 0.0885)).sub(headBP)); gl.frustumCulled = false;
-    bone('head').add(gl);
-    const lash = new THREE.Mesh(tg, lashMat); lash.frustumCulled = false;
-    bone('head').add(lash);
-  }
-  // eyes (mostly hidden in the squint)
+  // small eyes deep in the sockets
   const eyeMat = heroFog(createEyeMaterial());
   const eyes = EYES.map((e) => {
     const m = new THREE.Mesh(new THREE.SphereGeometry(e.r, 24, 16).rotateX(Math.PI / 2), eyeMat);
@@ -196,7 +210,7 @@ export async function create(ctx) {
     ['chest', [0, 1.42, -0.09], 0.7, 1.3], ['chest', [0, 1.49, -0.1], 0.5, 1.0],
     ['upperArmL', [0.21, 1.46, 0.0], 0.4, 1.0], ['upperArmR', [-0.21, 1.46, 0.0], 0.4, 1.0],
     ['chest', [0.07, 1.33, 0.1], 0.3, 0.9], ['chest', [-0.07, 1.33, 0.1], 0.3, 0.9], ['spine', [0, 1.1, -0.08], 0.4, 1.1],
-  ].map(([b, p, rate, size]) => ({ bone: bone(b), off: new THREE.Vector3(...p).sub(bindPos(b)), rate, size, acc: Math.random(), pos: new THREE.Vector3(), idle: /^chest$/.test(b) && Math.abs(p[0]) > 0.1 }));
+  ].map(([b, p, rate, size]) => ({ bone: bone(b), off: new THREE.Vector3(...p).sub(bindPos(b)), rate, size, acc: Math.random(), pos: new THREE.Vector3(), idle: /^chest$/.test(b) && (Math.abs(p[0]) > 0.1 || p[2] < -0.08) }));
   let steamK = 0;
   const fxHandles = [];
   const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
@@ -205,7 +219,7 @@ export async function create(ctx) {
     // calm: thin wisps from the shoulders only (the giant must stay the clearest thing in frame);
     // hurt / steam fury: the whole body vents
     const agitated = S.steaming || S.hurt > 0.15;
-    const k = steamK * (agitated ? (0.6 + S.hurt * 1.5 + (S.steaming ? 2.2 : 0)) : 0.3);
+    const k = steamK * (agitated ? (0.8 + S.hurt * 1.8 + (S.steaming ? 2.4 : 0)) : 0.55);
     if (k <= 0.001 || dt <= 0) return;
     bone('chest').getWorldPosition(center);
     for (const e of EMIT) {
@@ -217,7 +231,7 @@ export async function create(ctx) {
         _v.x += (Math.random() - 0.5) * 3; _v.y += (Math.random() - 0.5) * 2; _v.z += (Math.random() - 0.5) * 3;
         _v2.copy(_v).sub(center); _v2.y = 0; _v2.normalize().multiplyScalar(S.steaming ? 14 + Math.random() * 14 : 2 + Math.random() * 3);
         _v2.y = (S.steaming ? 10 : 4) + Math.random() * 6;
-        vapor.emit({ pos: _v, vel: _v2, size: (agitated ? 3 : 2) + Math.random() * 3 * e.size, size1: (agitated ? 12 + Math.random() * 10 : 6 + Math.random() * 5) * e.size * (S.steaming ? 1.3 : 1), life: agitated ? 2.6 + Math.random() * 2 : 2.2 + Math.random() * 1.5, alpha: S.steaming ? 0.26 : agitated ? 0.18 : 0.1, drag: 0.5, buoy: 3.5, color: [0.96, 0.95, 0.94] });
+        vapor.emit({ pos: _v, vel: _v2, size: (agitated ? 3 : 2) + Math.random() * 3 * e.size, size1: (agitated ? 12 + Math.random() * 10 : 6 + Math.random() * 5) * e.size * (S.steaming ? 1.3 : 1), life: agitated ? 2.6 + Math.random() * 2 : 2.2 + Math.random() * 1.5, alpha: S.steaming ? 0.3 : agitated ? 0.2 : 0.14, drag: 0.5, buoy: 3.5, color: [0.96, 0.95, 0.94] });
       }
     }
   }
@@ -254,9 +268,9 @@ export async function create(ctx) {
   function stopFxSteam() { for (const f of fxHandles) { try { f.h.stop?.(); } catch {} } fxHandles.length = 0; }
 
   // ---------- physics capsules (hook / collide / slash body / velocity) ----------
-  const CAPS = [['root', 'neck', 0.15], ['neck', 'head', 0.07], ['head', 'head', 0.12, [0, 0.1, 0.015]],
-    ['upperArmL', 'foreArmL', 0.058], ['foreArmL', 'handL', 0.045], ['handL', 'middleTipL', 0.06],
-    ['upperArmR', 'foreArmR', 0.058], ['foreArmR', 'handR', 0.045], ['handR', 'middleTipR', 0.06],
+  const CAPS = [['root', 'neck', 0.17], ['neck', 'head', 0.08], ['head', 'head', 0.12, [0, 0.1, 0.015]],
+    ['upperArmL', 'foreArmL', 0.075], ['foreArmL', 'handL', 0.058], ['handL', 'middleTipL', 0.06],
+    ['upperArmR', 'foreArmR', 0.075], ['foreArmR', 'handR', 0.058], ['handR', 'middleTipR', 0.06],
     ['thighL', 'shinL', 0.088], ['shinL', 'footL', 0.058], ['thighR', 'shinR', 0.088], ['shinR', 'footR', 0.058],
     ['footL', 'toeL', 0.045], ['footR', 'toeR', 0.045]]
     .map(([a, b, r, off]) => ({ a: bone(a), b: bone(b), r: r * K, off: off ? new THREE.Vector3(...off) : null, pa: new THREE.Vector3(), pb: new THREE.Vector3(), va: new THREE.Vector3(), vb: new THREE.Vector3(), pa0: new THREE.Vector3(), pb0: new THREE.Vector3() }));
@@ -333,7 +347,7 @@ export async function create(ctx) {
     object: root, position: root.position, headPosition, nape, weakPoints: brain.weakPoints, active: false,
     K, meshes, bones: Object.fromEntries(bones.map((b) => [b.name, b])), rig, brain, genMs, tris,
     get state() { return S.mode; }, get phase() { return S.phase; }, get hp() { return brain.hp; },
-    get steaming() { return S.steaming; }, get fighting() { return S.fighting; },
+    get steaming() { return S.steaming; }, get fighting() { return S.fighting; }, get steamWarn() { return S.steamWarn || 0; },
     appear() { brain.lookAt(null); show(); brain.appear(); steamK = 1; startFxSteam(); ctx.events.emit('colossal:appear', sys); },
     show() { show(); brain.show(); },
     // title screen: looming at the wall at golden hour, grinning over the parapet, steam wafting
@@ -384,6 +398,7 @@ export async function create(ctx) {
         if (ang > 0.35) _v2.lerp(Z, 1 - 0.35 / ang).normalize();
         e.quaternion.setFromUnitVectors(Z, _v2);
       }
+      for (const m of shadowProxies) m.visible = G.evap < 0.35;   // the shadow evaporates with the body
       emitSteam(dt);
       for (const f of fxHandles) { try { if (f.h.position) f.b.localToWorld(f.h.position.copy(f.off)); } catch {} }
       updateCaps(dt);
@@ -394,6 +409,7 @@ export async function create(ctx) {
   const _q = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1);
   function show() { root.visible = true; sys.active = true; if (steamK <= 0) { steamK = 1; startFxSteam(); } }
   ctx.events.on('fight:start', () => { try { sys.startFight(); } catch (e) { console.error(e); } });
+  sys.shadowTris = shadowTris;
 
   // debug: ?cpose=wall|appear|fight|p2|p3 to see it without the intro
   const dbg = ctx.params.cpose;

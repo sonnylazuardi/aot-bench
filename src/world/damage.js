@@ -79,7 +79,7 @@ export function createDamage(ctx, W) {
 
   // ---------------- buildings ----------------
   function collapse(b, from) {
-    if (b.destroyed) return;
+    if (b.destroyed || W.housesIndestructible) return;
     b.destroyed = true;
     let lx = b.center.x - from.x, lz = b.center.z - from.z;
     const L = Math.hypot(lx, lz) || 1; lx /= L; lz /= L;
@@ -110,13 +110,21 @@ export function createDamage(ctx, W) {
       if (p.y > (b.ridgeY || b.height) + radius) return;
       const k = Math.min(1, 1 - (d - b.radius * 0.35) / reach) * force / (b.tough || 1);
       if (k < 0.12) return;
-      b.hp -= k;
       n++;
-      if (b.hp <= 0) collapse(b, p);
-      else {
-        // partial: puff of dust + a few tiles
-        ctx.fx?.debris?.(new THREE.Vector3(b.center.x, b.eaveY || 6, b.center.z), 6, 6, { color: 0x7a3a2a });
+      if (W.housesIndestructible) {
+        // buildings stand (user direction): only a puff of dust / a few tiles and a shake, throttled per building
+        const t = ctx.clock.time;
+        if (b._puffT && t - b._puffT < 0.6) return;
+        b._puffT = t;
+        const at = new THREE.Vector3(b.center.x + (p.x - b.center.x) * 0.4, Math.min(b.eaveY || 6, Math.max(1.5, p.y)), b.center.z + (p.z - b.center.z) * 0.4);
+        ctx.fx?.dust?.(at, 4 + 6 * k, { color: 0xb8a58a });
+        ctx.fx?.debris?.(new THREE.Vector3(b.center.x, (b.eaveY || 6) + 0.5, b.center.z), Math.round(4 + 8 * k), 5, { color: 0x8a4a32 });
+        ctx.shake?.(0.15 + 0.25 * k, { at, radius: 120 });
+        return;
       }
+      b.hp -= k;
+      if (b.hp <= 0) collapse(b, p);
+      else ctx.fx?.debris?.(new THREE.Vector3(b.center.x, b.eaveY || 6, b.center.z), 6, 6, { color: 0x7a3a2a });
     });
     return n;
   }

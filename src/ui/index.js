@@ -33,7 +33,7 @@ export async function create(ctx) {
     <div class="line"><span class="wps"><i></i><i></i><i></i><i></i></span><span class="wpt">0 / 4 tendons severed</span><i class="dotsep"></i><span class="napev">Nape out of reach</span></div>
     <div class="line civ hide"><span class="k">Civilians lost</span><b class="cl">0</b><span class="clT"></span></div>`);
   const wave = el('div', 'wave hid', `<small>Civilians lost</small><b class="cl">0</b><div class="meter"><u></u></div><div class="t">— fleeing to the inner gate</div>`);
-  const boss = el('div', 'boss hid', `<div class="hd"><div class="nm"><small>60 m class · Pure titan</small><b>The Smiling Titan</b></div><div class="ph"><span>Phase</span><i></i><i></i><i></i></div></div>
+  const boss = el('div', 'boss hid', `<div class="hd"><div class="nm"><small>60 m class</small><b>The Colossal Titan</b></div><div class="ph"><span>Phase</span><i></i><i></i><i></i></div></div>
     <div class="bar"><u class="lag"></u><u class="cur"></u><i class="glint"></i><i class="seg" style="left:33.33%"></i><i class="seg" style="left:66.66%"></i></div>
     <div class="ft"><span class="fl"></span><span class="st"></span></div>`);
   const gear = el('div', 'gear', `<div class="hp"><span class="lbl">Vitals</span><div class="hpbar">${'<i></i>'.repeat(10)}</div></div>
@@ -49,11 +49,12 @@ export async function create(ctx) {
   const qte = el('div', 'qte', `<div class="key"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="5"/><circle class="pr" cx="50" cy="50" r="46" fill="none" stroke="#c4262e" stroke-width="5" stroke-dasharray="289" stroke-dashoffset="289"/></svg><b>F</b></div><div class="t">Mash F</div><div class="s">Cut yourself free</div>`);
   const engage = el('div', 'engage hide', 'Click to engage');
   const toasts = el('div', 'toasts');
-  const shock = el('div', 'shock'), steamov = el('div', 'steamov');
+  const shock = el('div', 'shock'), steamov = el('div', 'steamov', '<i class="sh"></i>');
   hudEl.append(steamov, obj, boss, gear, warns, xh, kill, qte, engage, shock);
 
   const radar = createRadar(ctx, hudEl);
-  const markers = createMarkers(ctx, hudEl);
+  // HUD panels markers must stay out of (boss bar, objective, gear cluster, radar)
+  const markers = createMarkers(ctx, hudEl, () => [boss, obj, gear, radar.el].filter((e) => e && !e.classList.contains('hid')));
 
   const banner = el('div', 'banner', `<div class="cap"></div><div class="big"></div><div class="sub"></div>`);
   const cine = el('div', 'layer'); const lbT = el('div', 'lbx t'), lbB = el('div', 'lbx b'); cine.append(lbT, lbB);
@@ -99,7 +100,7 @@ export async function create(ctx) {
   const cls = (e, c, on, key) => set(key || (c + (e.className.split(' ')[0])), !!on, () => e.classList.toggle(c, !!on));
 
   // ---------------------------------------------------------------- state
-  let subOpenT = 0, gearActiveT = 3, hmT = 0, visible = true, hurt = 0, streak = 0, streakT = 0, killPopT = 0, qteHits = 0, qteHitT = 0, subT = 0, helpOn = false;
+  let steamCueT = 0, subOpenT = 0, gearActiveT = 3, hmT = 0, visible = true, hurt = 0, streak = 0, streakT = 0, killPopT = 0, qteHits = 0, qteHitT = 0, subT = 0, helpOn = false;
   const warnEls = {};
   function setWarn(id, text, on, blink = true) {
     let w = warnEls[id];
@@ -118,7 +119,8 @@ export async function create(ctx) {
     banner(text, sub = '', opts = {}) {
       R.bCap.textContent = opts.cap || 'Shiganshina District'; R.bCap.style.display = opts.cap === '' ? 'none' : '';
       R.bBig.textContent = text || ''; R.bSub.textContent = sub || '';
-      banner.classList.remove('go'); void banner.offsetWidth; banner.classList.add('go');
+      // restart the animation without a forced synchronous layout
+      banner.classList.remove('go'); requestAnimationFrame(() => requestAnimationFrame(() => banner.classList.add('go')));
     },
     subtitle(text, secs) {
       if (!text) { subs.classList.remove('on'); subT = 0; return; }
@@ -176,6 +178,7 @@ export async function create(ctx) {
       shock.classList.remove('go'); void shock.offsetWidth; shock.classList.add('go'); hud.flash(/roar|howl/.test(ty) ? 0.4 : 0.18);
     }
   });
+  E.on('colossal:attack', (p) => { if (/steam|vent|blast/.test(String(p?.type || '').toLowerCase())) steamCueT = 3.2; });
   const PART = { hand_L: 'Left hand', hand_R: 'Right hand', ankle_L: 'Left ankle', ankle_R: 'Right ankle', nape: 'Nape' };
   E.on('colossal:hurt', (p) => {
     hmT = 0.22;
@@ -280,9 +283,12 @@ export async function create(ctx) {
       set('bfl', `${cut}/${limbs.length || 4}`, () => { R.bFl.innerHTML = `Tendons severed <b>${cut} / ${limbs.length || 4}</b>`; });
       const st = C.steaming ? 'Steam burst' : C.state === 'stunned' || C.stunned ? 'Staggered' : C.enraged || ph === 3 ? 'Berserk' : '';
       set('bst', st, (v) => { R.bSt.textContent = v; });
-      setWarn('steam', 'Steam burst — get clear of the body', !!C.steaming && mode === 'play');
+      // steam-blast warning: telegraph (C.steamWarn, if the boss exposes one), active venting, or a just-emitted steam attack
+      steamCueT -= dtu;
+      const warnK = Math.max(clamp(C.steamWarn ?? 0, 0, 1), C.steaming ? 1 : 0, steamCueT > 0 ? 1 : 0);
+      setWarn('steam', C.steaming || steamCueT > 0 ? 'Steam blast — get clear!' : 'Steam building — get clear', warnK > 0.05 && mode === 'play');
       let near = 999; if (C.object && P.position) near = Math.hypot(P.position.x - C.object.position.x, P.position.z - C.object.position.z);
-      set('steamov', C.steaming ? Math.round(clamp(1 - (near - 25) / 60, 0, 1) * 20) : 0, (v) => { steamov.style.opacity = v / 20; });
+      set('steamov', warnK > 0.05 ? Math.round(clamp(1.25 - near / 160, 0.35, 1) * warnK * 20) : 0, (v) => { steamov.style.opacity = v / 20; steamov.classList.toggle('on', v > 0); });
     } else setWarn('steam', '', false);
     // civilians
     const civ = ctx.titans?.civilians;

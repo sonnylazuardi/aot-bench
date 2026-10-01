@@ -65,6 +65,8 @@ function sampleT(tab, h, mu, out) {
   return out;
 }
 
+/** Fast sun transmittance from the cached table (radians). */
+export function sunTransmittanceFast(el, mie, out = [0, 0, 0]) { return sampleT(buildTransmittance(mie), 0.05, Math.sin(el), out); }
 /** Sun transmittance to the ground observer for a sun at elevation `el` (radians). */
 export function sunTransmittance(el, mie = 1) {
   const tab = buildTransmittance(mie);
@@ -160,7 +162,8 @@ export function makeSharedUniforms(lutTex) {
     uAotSunDir: { value: shared(new THREE.Vector3(0, 1, 0)) },
     uAotSunCol: { value: shared(new THREE.Vector3(1, 1, 1)) },   // sun illuminance at the ground (rgb)
     uAotSkyK: { value: shared(new THREE.Vector4(8, 1, 0, 0)) },  // x sky scale, y aureole, z smoke pall, w time
-    uAotSkyTint: { value: shared(new THREE.Vector3(1, 1, 1)) },
+    uAotSkyTint: { value: shared(new THREE.Vector3(1, 1, 1)) },   // zenith tint
+    uAotSkyTint2: { value: shared(new THREE.Vector3(1, 1, 1)) },  // horizon tint
     uAotGlowCol: { value: shared(new THREE.Vector3(1.0, 0.55, 0.25)) },
     uAotSmokeCol: { value: shared(new THREE.Vector3(0.25, 0.2, 0.17)) },
     uAotSmokeDir: { value: shared(new THREE.Vector3(0, 0, 1)) },
@@ -178,7 +181,7 @@ export function makeSharedUniforms(lutTex) {
 
 export const GLSL_SKY_PARS = /* glsl */`
 uniform sampler2D uAotSkyLUT;
-uniform vec3 uAotSunDir, uAotSunCol, uAotSkyTint, uAotGlowCol, uAotSmokeCol, uAotSmokeDir, uAotFireCol;
+uniform vec3 uAotSunDir, uAotSunCol, uAotSkyTint, uAotSkyTint2, uAotGlowCol, uAotSmokeCol, uAotSmokeDir, uAotFireCol;
 uniform vec4 uAotSkyK, uAotFogA, uAotFogB, uAotFogC, uAotInf;
 #ifndef AOT_PI
 #define AOT_PI 3.14159265359
@@ -201,7 +204,7 @@ float aotSmokeMask(vec3 dir) {
 }
 // lutDir: direction used for the LUT (may be squashed toward the horizon); dir: true view direction (sun lobes)
 vec3 aotSkyAt(vec3 lutDir, vec3 dir, float corona) {
-  vec3 c = aotSkyLUT(lutDir) * uAotSkyK.x * uAotSkyTint;
+  vec3 c = aotSkyLUT(lutDir) * uAotSkyK.x * mix(uAotSkyTint2, uAotSkyTint, smoothstep(0.0, 0.55, max(lutDir.y, 0.0)));
   float mu = dot(dir, uAotSunDir);
   float mp = max(mu, 0.0);
   float hz = exp(-max(lutDir.y, 0.0) * 3.2);

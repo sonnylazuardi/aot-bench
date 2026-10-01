@@ -223,7 +223,7 @@ Surf townGround(vec2 w) {
   vec2 muv = (w + 400.0) / 800.0;
   vec4 m = texture(tMap, muv);
   float ao = texture(tAO, muv).r;
-  float lod = smoothstep(0.03, 0.12, gPx);
+  float lod = smoothstep(0.02, 0.07, gPx);
   // yard: packed earth, straw, grass tufts
   float n1 = nM(w * 0.05), n2 = nH(w * 0.23), n3 = nF(w * 0.9);
   vec3 dirt = mix(vec3(0.16, 0.125, 0.085), vec3(0.22, 0.18, 0.12), n2) * (0.8 + 0.3 * n3);
@@ -243,8 +243,9 @@ Surf townGround(vec2 w) {
     float along = dot(w, alo);
     vec3 v = voroG(w / 0.24);
     float stone = smoothstep(0.03, 0.16, v.y);
-    vec3 sc = mix(vec3(0.2, 0.19, 0.175), vec3(0.3, 0.27, 0.23), v.z) * (0.7 + 0.5 * hash12(vec2(v.z, 3.1)));
-    sc = mix(sc, sc * vec3(0.8, 0.85, 1.0), step(0.8, v.z) * 0.6);
+    float vz = mix(v.z, 0.5, lod);
+    vec3 sc = mix(vec3(0.2, 0.19, 0.175), vec3(0.3, 0.27, 0.23), vz) * (0.7 + 0.5 * mix(hash12(vec2(v.z, 3.1)), 0.5, lod));
+    sc = mix(sc, sc * vec3(0.8, 0.85, 1.0), step(0.8, v.z) * 0.6 * (1.0 - lod));
     sc *= 0.85 + 0.25 * n2;
     vec3 gap = vec3(0.07, 0.06, 0.05) * (0.8 + 0.5 * n3);
     vec3 cob = mix(gap, sc * (0.75 + 0.35 * (1.0 - v.x)), mix(stone, 0.8, lod));
@@ -273,10 +274,30 @@ Surf townGround(vec2 w) {
       rough = mix(rough, 0.78 - 0.1 * rut, tr);
       hh = mix(hh, 0.012 * joint * (1.0 - lod) - 0.01 * rut, tr);
     }
+    // central drain channel (Mittelrinne): a dark, damp V of flat slabs along the centre line
+    float ch = 1.0 - smoothstep(0.2, 0.3, dc);
+    if (ch > 0.0) {
+      float cs = fract(along / 0.55);
+      float cj = smoothstep(0.0, 0.06, cs) * (1.0 - smoothstep(0.94, 1.0, cs));
+      vec3 cc = vec3(0.1, 0.095, 0.09) * (0.8 + 0.4 * hash12(vec2(floor(along / 0.55), 4.0))) * mix(0.6, 1.0, mix(cj, 1.0, lod));
+      cob = mix(cob, cc, ch);
+      rough = mix(rough, 0.45, ch);
+      hh = mix(hh, -0.03 + dc * 0.08, ch);
+    }
     // central wear: smoother, paler
     cob = mix(cob, cob * 1.08, (1.0 - smoothstep(0.3, 2.2, dc)) * 0.5);
     // gutter band along the facades: flat slabs, dark and damp, puddles
-    float gutter = (1.0 - smoothstep(0.6, 0.93, street)) * step(0.08, street);
+    float gutter = (1.0 - smoothstep(0.62, 0.93, street)) * smoothstep(0.5, 0.58, street);
+    // kerb / doorstep band: pale dressed stone right against the facades (35 cm)
+    float kerb = smoothstep(0.26, 0.32, street) * (1.0 - smoothstep(0.5, 0.56, street));
+    if (kerb > 0.0) {
+      float ks = fract(along / 0.95);
+      float kj = smoothstep(0.0, 0.04, ks) * (1.0 - smoothstep(0.96, 1.0, ks));
+      vec3 kc = vec3(0.38, 0.355, 0.31) * (0.85 + 0.25 * hash12(vec2(floor(along / 0.95), 7.0))) * mix(0.6, 1.0, mix(kj, 1.0, lod)) * (0.8 + 0.25 * n2);
+      cob = mix(cob, kc, kerb);
+      rough = mix(rough, 0.8, kerb);
+      hh = mix(hh, 0.04 * kj * (1.0 - lod) + 0.02, kerb);
+    }
     if (gutter > 0.0) {
       float gs = fract(along / 0.7);
       float gj = smoothstep(0.0, 0.05, gs) * (1.0 - smoothstep(0.95, 1.0, gs));
@@ -334,7 +355,7 @@ Surf terrain(vec2 w) {
   float rowsAA = 1.0 - smoothstep(0.04, 0.3, gPx);
   float strength = dat.g * inMap * step(type, 0.7);
   c *= 1.0 - strength * 0.28 * (1.0 - smoothstep(0.15, 0.35, rows)) * rowsAA;
-  c *= 1.0 - strength * 0.12 * smoothstep(0.3, 0.7, nF(vec2(dot(w, dir) * 0.05, across * 0.3)));
+  c *= 1.0 - strength * 0.12 * smoothstep(0.3, 0.7, nH(vec2(dot(w, dir) * 0.02, across * 0.1)));
   // big-scale patchiness + fine noise
   c *= 0.85 + 0.3 * n1;
   c *= 0.88 + 0.2 * n3 + 0.1 * (n4 - 0.5);
@@ -438,13 +459,15 @@ export function buildGround(ctx, shared, plan, solids) {
   }
   ctx.scene.add(group);
   // ---------------- deferred (time-sliced) parts ----------------
-  out.jobs = function* () {
-  {
+  // the town map (streets / paving / contact AO) is its own job so it can run before everything else
+  out.mapJob = function* () {
     const o2 = {};
     yield* makeTownMapGen(plan, o2);
     out.tMap = o2.tMap; out.tAO = o2.tAO;
     shared.groundUniforms.tMap.value = o2.tMap; shared.groundUniforms.tAO.value = o2.tAO;
-    yield 'townmap';
+  };
+  out.jobs = function* () {
+  {
     const land = {};
     yield* makeLandMapGen(rng, land);
     out.land = land;
