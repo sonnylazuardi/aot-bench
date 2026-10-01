@@ -11,7 +11,7 @@
     "publish": "bun tools/publish.mjs",
     "ab": "bun tools/ab.mjs",
     "push-public": "bun tools/push-public.mjs",
-    "deploy": "bun run build && bunx wrangler deploy"
+    "deploy": "bun run build && bunx wrangler pages deploy dist --project-name=aot-shiganshina"
   },
   "dependencies": {
     "n8ao": "^2.0.1",

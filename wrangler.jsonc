@@ -1,8 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // Static-assets Worker: `bun run build` → dist/ is uploaded as-is (no Worker script).
-  // A missing /__bake/*.bin answers 404 so src/core/bake.js falls back to building in workers.
+  // Cloudflare Pages project (git-connected). Custom domain: aot.sonnylab.com CNAME → <project>.pages.dev at Rumahweb.
   "name": "aot-shiganshina",
   "compatibility_date": "2026-09-01",
-  "assets": { "directory": "./dist" }
+  "pages_build_output_dir": "./dist"
 }
