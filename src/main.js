@@ -255,7 +255,25 @@ window.__game = {
 //   whose programs differ from the default-framebuffer (sRGB output) variants compile() would otherwise build.
 // - hidden objects (the Colossal before appear(), cinematic props, pools) are made visible for the warm-up so their
 //   main AND shadow-depth variants link; the cinematic DOF pass and the particle pools are switched on for one frame.
+// Shadow depth materials (perf): three draws every caster without a customDepthMaterial with ONE shared
+// MeshDepthMaterial whose program variant (instanced / skinned / side / map) flips from caster to caster, so each flip
+// re-runs getProgram (parameters + cache-key string) — ~18x per frame here. One stable depth material per variant.
+const depthVariants = new Map();
+let depthScanT = 0;
+function stabilizeDepthMaterials() {
+  scene.traverse((o) => {
+    if (!o.isMesh || !o.castShadow || o.customDepthMaterial || o.isPoints) return;
+    const m = Array.isArray(o.material) ? o.material[0] : o.material;
+    if (!m || (m.clipShadows && m.clippingPlanes?.length)) return;
+    const key = `${o.isInstancedMesh ? (o.instanceColor ? 2 : 1) : 0}${o.isSkinnedMesh ? 1 : 0}${o.isBatchedMesh ? 1 : 0}|${m.shadowSide ?? m.side}|${m.map ? 1 : 0}${m.alphaMap ? 1 : 0}${m.alphaTest > 0 ? 1 : 0}${m.displacementMap && m.displacementScale !== 0 ? 1 : 0}${o.morphTargetInfluences ? 1 : 0}`;
+    let d = depthVariants.get(key);
+    if (!d) { d = new THREE.MeshDepthMaterial(); d.name = 'shadowDepth' + key; depthVariants.set(key, d); }
+    o.customDepthMaterial = d;
+  });
+}
+
 async function warmShaders() {
+  stabilizeDepthMaterials();
   const hidden = [];
   scene.traverse((o) => { if (!o.visible && o !== scene) { hidden.push(o); o.visible = true; } });
   if (ctx.post) ctx.post.warmup = true;
@@ -297,6 +315,12 @@ window.__game.ready = load().then(async () => {
   // Precompile shaders so the first seconds don't hitch (parallel via KHR_parallel_shader_compile on real GPUs).
   // Skipped headless: SwiftShader has no parallel compile, so it would only delay `ready` — the first render compiles anyway.
   const tc = performance.now();
+  // audio bank synthesis runs on the main thread (OfflineAudioContext graph building): finish it behind the loader
+  if (!shotMode && ctx.audio?.bankReady) {
+    loaderUI.step('Preparing sound…', 0);
+    await Promise.race([ctx.audio.bankReady, new Promise((r) => setTimeout(r, Number(params.audioWait || 30) * 1000))]);
+  }
+  loadTimes.audio = { ms: Math.round(performance.now() - tc) };
   if (!shotMode && !params.nocompile) {
     loaderUI.step('Compiling shaders…', 0);
     await warmShaders();
@@ -308,6 +332,7 @@ window.__game.ready = load().then(async () => {
     timer.update();
     const dt = Math.min(timer.getDelta(), 1 / 20);
     if (!frozen) step(dt);
+    if ((depthScanT -= dt) <= 0) { depthScanT = 1; stabilizeDepthMaterials(); }   // new casters (titans, debris)
     render(dt);
     updateDynRes(dt);
   });

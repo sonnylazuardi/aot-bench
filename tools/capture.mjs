@@ -104,6 +104,9 @@ function installHelpers() {
     key, tap(code) { key(code, true); key(code, false); },
     // converge the half-res temporally accumulated clouds for the pinned camera (cloud pass only, then one full render)
     settle(n = 24) { for (let i = 0; i < n; i++) c.sky?.renderClouds?.(c.camera); G.render(); return n; },
+    // jump every running CSS transition/animation (HUD fades, banners) to its end state: DOM timing is wall-clock,
+    // so without this a still could catch the HUD mid-fade
+    finish() { for (const a of document.getAnimations()) { try { a.finish(); } catch {} } },
     hold(code) { key(code, true); }, release(code) { key(code, false); },
     // highest solid surface under (x,z) excluding characters
     surface(x, z, from = 200) { return c.physics.raycast(V(x, from, z), DOWN, from + 50, { exclude: ['titans', 'colossal', 'player'] }); },
@@ -159,121 +162,122 @@ async function openGame(query, W, H) {
 const STILLS = [
   {
     n: 1, ref: 'ref-01-colossal-head-closeup.png', query: 'skip=1', hud: false,
-    desc: 'Boss head + shoulders close-up, low angle against the sky. Phase 1 fight (boss gripping the outer wall at the breach), mood day.',
+    desc: 'Tight low-angle close-up: head in the upper-left third, neck/trapezius/shoulder lower right, sky behind. Phase 1 fight (boss leaning over the outer wall at the breach), mood day.',
     setup: () => {
       const c = __ctx, k = __cap; k.calm(); c.hud.setVisible(false);
       k.adv(4); k.calm(); c.sky.setMood('day', 0); k.adv(0.5);
       const h = c.colossal.headPosition.clone();
-      k.cam(k.V(h.x - 22, h.y - 15, h.z - 38), k.V(h.x + 5, h.y - 5, h.z), 50);
-      k.adv(0.05);
-      return 'phase 1 fight, boss at the wall (calm: attack cooldown held), HUD hidden, debug camera';
+      // on the wall walkway between the two gripping hands, ~20 m under/in front of the face, looking up at it
+      k.cam(k.V(-4, 52.5, 386), k.V(h.x - 7, h.y - 5, h.z), 60);
+      k.adv(1 / 60);
+      return 'phase 1 fight, boss gripping the wall (calm: attack cooldown held), HUD hidden, debug camera on the wall walkway between its hands';
     },
   },
   {
     n: 2, ref: 'ref-02-colossal-wall-wide.png', query: 'skip=1', hud: false,
-    desc: 'Wide: boss standing in front of the wall above the town roofs and the gate church tower; soldier in the air in the foreground on two cables. Phase 2 (boss inside the walls), mood golden.',
+    desc: 'Boss standing in front of the wall face filling most of the frame height, town roofs and the gate church tower below it, soldier large in the foreground on two taut cables. Phase 2 (boss inside the walls), mood golden.',
     setup: () => {
-      const c = __ctx, k = __cap, C = c.colossal, P = c.player; c.hud.setVisible(false);
+      const c = __ctx, k = __cap, C = c.colossal, P = c.player, T = c.THREE; c.hud.setVisible(false);
       k.adv(2); C.setPhaseDebug(2); k.adv(6); k.calm(); c.sky.setMood('golden', 0);
       const r = C.object.position.clone();
-      // camera in the town, north-east of the boss, roof height; the gate church (-52,306) sits left of the boss
-      const camP = k.V(r.x + 40, 34, r.z - 175), tgt = k.V(r.x - 8, 30, r.z);
-      // soldier ~12 m in front of the lens, upper left, hooked to the wall top and a house roof
-      const dir = tgt.clone().sub(camP).normalize(), right = new __ctx.THREE.Vector3().crossVectors(dir, k.V(0, 1, 0)).normalize();
-      const pp = camP.clone().addScaledVector(dir, 13).addScaledVector(right, -5.5).add(k.V(0, 3.2, 0));
-      P.teleport(pp, Math.atan2(dir.x, dir.z) + 0.9);
-      P.debugHook('L', k.V(r.x - 70, 50, Math.sqrt(387 * 387 - (r.x - 70) ** 2)));
-      P.debugHook('R', k.V(r.x - 35, 49, Math.sqrt(387 * 387 - (r.x - 35) ** 2)));
-      P.velocity.set(-6, 2, 9);
-      k.adv(0.25);
-      k.cam(camP, tgt, 62);
-      k.adv(0.03);
-      return 'phase 2 fight (setPhaseDebug(2): hands severed, boss striding inside the wall), player airborne with both hooks attached (debugHook) to the wall top, HUD hidden, debug camera';
+      const camP = k.V(r.x + 6, 24, r.z - 78), tgt = k.V(r.x - 3, 31, r.z);
+      const dir = tgt.clone().sub(camP).normalize(), right = new T.Vector3().crossVectors(dir, k.V(0, 1, 0)).normalize();
+      const up = new T.Vector3().crossVectors(right, dir);
+      const wallPt = (x) => k.V(x, 49, Math.sqrt(387 * 387 - x * x));
+      const off = (v) => v.clone().addScaledVector(dir, 4.6).addScaledVector(right, -1.7).addScaledVector(up, 0.75);
+      P.teleport(off(camP), Math.atan2(dir.x, dir.z) - 1.2);
+      P.debugHook('L', wallPt(r.x - 60)); P.debugHook('R', wallPt(r.x - 48));
+      P.velocity.set(-4, 3, 8);
+      k.adv(0.2);
+      // place the lens relative to where the swinging soldier actually is (same offset as planned)
+      const p = P.position.clone().add(k.V(0, 1, 0));
+      const cam2 = p.clone().addScaledVector(dir, -4.6).addScaledVector(right, 1.7).addScaledVector(up, -0.75);
+      k.cam(cam2, cam2.clone().add(tgt.clone().sub(camP)), 50);
+      k.adv(0.02);
+      return 'phase 2 fight (setPhaseDebug(2): hands severed, boss striding inside the wall), player airborne on both hooks (debugHook) anchored to the wall top, HUD hidden, debug camera ~4.5 m behind the soldier; the gate church stands west of the boss, so it lands right of it in this south-facing view';
     },
   },
   {
     n: 3, ref: 'ref-03-colossal-lowangle-steam.png', query: 'skip=1', hud: false,
-    desc: 'Low-angle full body against the sky, steam veiling the legs. Phase 3 fury (venting), mood afternoon.',
+    desc: 'Low-angle full body against the sky, steam veiling the body/legs. Phase 3 fury (venting), mood afternoon.',
     setup: () => {
-      const c = __ctx, k = __cap, C = c.colossal; c.hud.setVisible(false);
-      k.adv(2); C.setPhaseDebug(3); k.adv(6); c.sky.setMood('afternoon', 0); k.adv(0.5);
+      const c = __ctx, k = __cap, C = c.colossal, P = c.player; c.hud.setVisible(false);
+      k.adv(2); C.setPhaseDebug(3); k.adv(6); c.sky.setMood('afternoon', 0);
+      P.teleport(k.V(60, 40, -60), 0); P.setEnabled(false);   // soldier out of this shot
+      k.adv(0.5);
       const r = C.object.position.clone();
-      k.cam(k.V(r.x - 18, r.y + 3, r.z - 62), k.V(r.x - 2, r.y + 34, r.z), 72);
-      k.adv(0.05);
-      return 'phase 3 fight (setPhaseDebug(3): fury, venting steam), HUD hidden, debug camera low on the main avenue';
+      k.cam(k.V(r.x - 5, r.y + 1.8, r.z - 36), k.V(r.x, r.y + 25, r.z), 78);
+      k.adv(0.02);
+      return 'phase 3 fight (setPhaseDebug(3): fury, venting steam), player moved out of shot, HUD hidden, debug camera at street level on the main avenue ~36 m in front of the boss';
     },
   },
   {
     n: 4, ref: 'ref-04-weakpoint-hud.png', query: 'skip=1', hud: true,
-    desc: 'Gameplay: soldier hooked onto the boss in phase 1 with soft lock-on (Tab) on a hand; weak-point HUD markers (nape ring, limb X + HP bars) on the body. Chase camera, HUD on.',
+    desc: 'Gameplay: soldier hanging on both hooks in front of the boss in phase 1, soft lock-on (Tab) on a hand; weak-point HUD markers (nape ring, limb X + HP bar) on the body. Real chase camera, HUD on.',
     setup: () => {
-      const c = __ctx, k = __cap, C = c.colossal, P = c.player, T = c.THREE;
-      P.noPointerLock = true;
+      const c = __ctx, k = __cap, C = c.colossal, P = c.player;
+      P.noPointerLock = true; k.calm();
       k.adv(4); k.calm(); c.sky.setMood('day', 0);
       const h = C.headPosition.clone();
-      const pp = k.V(h.x - 14, 42, 352);
+      const pp = k.V(h.x - 10, 58, 350);
       P.teleport(pp, Math.atan2(h.x - pp.x, h.z - pp.z));
-      P.pitch = 0.32;
+      P.pitch = 0.12;
       k.adv(0.1);
       k.tap('Tab'); k.adv(0.05);
-      k.tap('KeyQ'); k.tap('KeyE'); k.adv(0.9);
-      return `phase 1 fight, player airborne in front of the boss, soft lock-on (Tab) + both hooks fired (Q/E) at the lock target; real chase camera; HUD on`;
+      k.tap('KeyQ'); k.tap('KeyE'); k.adv(0.7);
+      return 'phase 1 fight (calm), player teleported airborne ~30 m in front of the boss above the wall top, soft lock-on (Tab) + both hooks fired (Q/E) at the lock target, real chase camera (owner=player), HUD on';
     },
   },
   {
     n: 5, ref: 'ref-05-rooftop-blue-sky.png', query: 'skip=1', hud: true,
-    desc: 'Soldier running on a tiled pitched house roof, third person from low beside the roof, clear blue day sky with cumulus. Phase 1, mood day, HUD on.',
+    desc: 'Soldier running on a tiled pitched house roof near the ridge, third person from low beside him on the roof, clear blue day sky with cumulus behind. Phase 1, mood day, HUD on.',
     setup: () => {
-      const c = __ctx, k = __cap, P = c.player, T = c.THREE;
-      P.noPointerLock = true;
+      const c = __ctx, k = __cap, P = c.player;
+      P.noPointerLock = true; k.calm();
       k.adv(3); k.calm(); c.sky.setMood('day', 0);
-      // a mid-size pitched-roof house south-west of the plaza
-      const B = c.world.buildings.filter((b) => b.kind === 'house' && !b.destroyed && b.box.max.y > 13 && b.box.max.y < 20
-        && Math.hypot(b.center.x + 90, b.center.z - 120) < 70);
-      B.sort((a, b) => Math.hypot(a.center.x + 90, a.center.z - 120) - Math.hypot(b.center.x + 90, b.center.z - 120));
-      const b = B[0], bx = b.box, sx = bx.max.x - bx.min.x, sz = bx.max.z - bx.min.z;
-      const alongX = sx >= sz;             // ridge along the long side
+      // the tallest mid-size pitched-roof house south-west of the plaza (open sky above its ridge)
+      const B = c.world.buildings.filter((b) => b.kind === 'house' && !b.destroyed && b.box.max.y > 14 && b.box.max.y < 24
+        && Math.hypot(b.center.x + 90, b.center.z - 120) < 80);
+      B.sort((a, b) => b.box.max.y - a.box.max.y);
+      const b = B[0], bx = b.box, sx = bx.max.x - bx.min.x, sz = bx.max.z - bx.min.z, alongX = sx >= sz;
       const cx = (bx.min.x + bx.max.x) / 2, cz = (bx.min.z + bx.max.z) / 2;
-      // a point 35% of the way from the ridge to the south/east eave
-      const px = alongX ? cx - sx * 0.2 : cx + sx * 0.18, pz = alongX ? cz + sz * 0.18 : cz - sz * 0.2;
+      const px = alongX ? cx + sx * 0.2 : cx + sx * 0.1, pz = alongX ? cz + sz * 0.1 : cz + sz * 0.2;
       const hit = k.surface(px, pz);
-      const yaw = alongX ? -Math.PI / 2 : Math.PI;   // run along the ridge line
-      P.teleport(hit.point.clone(), yaw);
-      k.hold('KeyW'); k.hold('ShiftLeft'); k.adv(0.7); k.release('ShiftLeft'); k.release('KeyW');
+      P.teleport(hit.point.clone(), alongX ? -Math.PI / 2 : Math.PI);
+      k.hold('KeyW'); k.hold('ShiftLeft'); k.adv(0.35); k.release('ShiftLeft'); k.release('KeyW');
       const p = P.position.clone();
-      // low camera ahead-left of the runner, near the roof surface, looking back and up past him into the sky
       const fwd = k.V(Math.sin(P.yaw), 0, Math.cos(P.yaw)), side = k.V(fwd.z, 0, -fwd.x);
-      const camP = p.clone().addScaledVector(fwd, 3.6).addScaledVector(side, -2.6).add(k.V(0, 0.55, 0));
-      const tgt = p.clone().addScaledVector(fwd, -1.5).add(k.V(0, 2.4, 0));
-      k.cam(camP, tgt, 62);
+      const camP = p.clone().addScaledVector(fwd, 2.3).addScaledVector(side, -1.5).add(k.V(0, 0.3, 0));
+      const tgt = p.clone().addScaledVector(fwd, -1.2).addScaledVector(side, 0.9).add(k.V(0, 2.6, 0));
+      k.cam(camP, tgt, 64);
       k.adv(0.02);
-      return `phase 1 fight, player running (W+Shift for 0.7 s) on house #${b.id} roof (${Math.round(cx)}, ${Math.round(cz)}), HUD on, debug camera`;
+      return `phase 1 fight (calm), player teleported onto house #${b.id} roof (${Math.round(cx)}, ${Math.round(hit.point.y)}, ${Math.round(cz)}) and running (W+Shift, 0.35 s), HUD on, debug camera low on the roof ahead of him`;
     },
   },
   {
     n: 6, ref: 'ref-06-afternoon-swing-town.png', query: 'skip=1', hud: true,
-    desc: 'Soldier mid-swing on two taut cables high over the town spires, phase 3 afternoon pink mood, HUD on.',
+    desc: 'Soldier mid-swing on two taut cables high over the town and its spires, near-level camera close on him, phase 3 afternoon pink mood, HUD on.',
     setup: () => {
       const c = __ctx, k = __cap, C = c.colossal, P = c.player, T = c.THREE;
       P.noPointerLock = true;
       k.adv(2); C.setPhaseDebug(3); k.adv(6); c.sky.setMood('afternoon', 0);
-      const pp = k.V(-12, 44, 98);
-      P.teleport(pp, 2.2);
-      // both cables to the plaza church spire top (~70 m away)
       const sp = c.world.buildings.find((b) => b.kind === 'church');
       const top = sp ? k.V(sp.center.x, sp.box.max.y - 3, sp.center.z) : k.V(38, 52, 42);
+      P.teleport(k.V(-12, 44, 98), 2.2);
       P.debugHook('L', top.clone().add(k.V(-0.8, 0, 0.8)));
       P.debugHook('R', top.clone().add(k.V(0.8, -1.5, -0.8)));
       P.velocity.set(-10, -4, -14);
       k.adv(0.35);
       const p = P.position.clone().add(k.V(0, 1, 0));
-      const toA = top.clone().sub(p).setY(0).normalize(), side = k.V(-toA.z, 0, toA.x);
-      // in front-left of the swinging soldier, slightly below him, the cables run away to the right
-      const camP = p.clone().addScaledVector(toA, -2.5).addScaledVector(side, 6.5).add(k.V(0, -1.2, 0));
-      const tgt = p.clone().addScaledVector(toA, 6).add(k.V(0, -2.5, 0));
-      k.cam(camP, tgt, 60);
+      const a = top.clone().sub(p).setY(0).normalize();
+      const s = k.V(-a.z, 0, a.x);
+      const look = a.clone().multiplyScalar(1.2).addScaledVector(s, -2.6).normalize();
+      if (a.dot(new T.Vector3().crossVectors(look, k.V(0, 1, 0))) < 0) s.negate();   // cables run off to the right
+      const camP = p.clone().addScaledVector(a, -1.2).addScaledVector(s, 2.6).add(k.V(0, -0.5, 0));
+      const tgt = p.clone().addScaledVector(a, 0.9).add(k.V(0, -0.45, 0));
+      k.cam(camP, tgt, 55);
       k.adv(0.02);
-      return 'phase 3 fight (setPhaseDebug(3)), player mid-swing with both hooks attached (debugHook) to the plaza church spire, HUD on, debug camera';
+      return 'phase 3 fight (setPhaseDebug(3)), player mid-swing on both hooks (debugHook) anchored to the plaza church spire, HUD on, debug camera ~3 m off his side';
     },
   },
 ];
@@ -294,6 +298,12 @@ function writeManifest(rows) {
 Generated by \`tools/capture.mjs\` from the running dev build (\`${BASE}\`), headless Chromium + SwiftShader (software WebGL2),
 \`?shot=1&freeze=1&q=high\`, seeded Math.random. Every image is a single live screenshot of the game page (WebGL canvas + DOM HUD);
 nothing is composited, retouched or cropped. Refs are never loaded into the game.
+
+Still procedure: fresh page per still -> pose the state through ctx APIs -> pin/keep the camera -> wait 2.5 s wall-clock, then
+\`sky.renderClouds(camera)\` x24 (converges the half-res temporally accumulated cloud history for that exact camera) + one full
+render -> \`document.getAnimations().finish()\` (HUD fades/banners at their end state) -> screenshot. Note: the cloud history
+blends at 0.82 per frame (~5-6 effective samples), so residual cloud dither is the steady state of the current build, not a
+convergence shortfall of the capture.
 `];
   for (let i = 1; i <= 6; i++) { const k = String(i).padStart(2, '0'); if (rows[k]) parts.push(`<!-- still-${k} -->\n${rows[k]}<!-- /still-${k} -->`); }
   if (rows.walk) parts.push(`<!-- walkthrough -->\n${rows.walk}<!-- /walkthrough -->`);
@@ -314,9 +324,11 @@ async function captureStills() {
     const { page, errors, url } = await openGame(s.query, STILL_W, STILL_H);
     let scene = '', setupErr = null;
     try { scene = await page.evaluate(s.setup); } catch (e) { setupErr = e.message.split('\n')[0]; log(`still-${k}: setup error ${setupErr}`); }
-    // DOM HUD transitions/banners run on wall-clock time: let them settle before the screenshot
-    await page.waitForTimeout(s.hud ? 9000 : 1500);
-    await page.evaluate(() => window.__game.render());
+    // DOM HUD transitions/banners run on wall-clock time: let any pending ones start, then jump them to their end state;
+    // converge the temporally accumulated clouds for the pinned camera (cloud pass x24 + one full render)
+    await page.waitForTimeout(2500);
+    await page.evaluate(() => { window.__cap.settle(24); window.__cap.finish(); });
+    await page.waitForTimeout(300);
     const info = await page.evaluate(() => ({ cam: window.__cap.camInfo(), st: window.__cap.state() }));
     await page.screenshot({ path: file, timeout: 300000 });
     const iso = new Date().toISOString();
@@ -380,27 +392,27 @@ async function captureWalkthrough() {
 
   // 1. title
   beat('title screen');
-  await run(3);
+  await run(2.5);
   // 2. begin -> intro (the begin fade runs on wall-clock time)
   await ev(() => window.__ctx.events.emit('ui:begin'));
   await page.waitForTimeout(1300);
   beat('intro: calm crane over the town');
-  await run(3);
-  await skipTime(7.2, 'intro');
+  await run(2.5);
+  await skipTime(7.7, 'intro');
   beat('intro: lightning strike at the wall');
-  await run(3.6);
-  await skipTime(2.6, 'intro');
+  await run(3);
+  await skipTime(3.6, 'intro');
   beat('intro: reveal — hand on the wall, head rises');
-  await run(4.4);
-  await skipTime(7.6, 'intro');
+  await run(4);
+  await skipTime(12.6, 'intro');
   beat('intro: kick / breach');
-  await run(5);
+  await run(4.5);
   // 3. skip the rest of the intro -> fight
   await ev(() => window.__ctx.intro.skip());
   await page.waitForTimeout(1500);
   await ev(() => window.__game.advance(0.1));
   beat('fight phase I: hand-off, Bring Down the Titan');
-  await run(2.5);
+  await run(2);
   // 4. phase I: real input on a hand. Fly off a wall-adjacent spot toward the boss, lock on, hooks, gas, slash.
   await ev(() => {
     const c = __ctx, P = c.player, C = c.colossal, k = __cap;
@@ -425,16 +437,16 @@ async function captureWalkthrough() {
       if (!P.hooks[0].attached && !P.hooks[1].attached && P.hooks[0].state === 'idle') { __cap.tap('KeyQ'); __cap.tap('KeyE'); }
     });
   };
-  await attack(9);
+  await attack(8);
   await ev(() => { __cap.release('Space'); });
   beat('fight phase I: swinging / slashing');
-  await attack(4);
+  await attack(3);
   const wpAfter = await ev(() => __ctx.colossal.weakPoints.map((w) => `${w.name}=${(w.hp ?? 1).toFixed(2)}`).join(' '));
   log('walkthrough: weak points after phase I attack: ' + wpAfter);
   // 5. phase change II (both hands treated as severed)
   await ev(() => { __cap.release('Space'); __cap.tap('KeyQ'); __cap.tap('KeyE'); __ctx.colossal.setPhaseDebug(2); });
   beat('phase change -> II (cinematic, golden mood)');
-  await run(6);
+  await run(5);
   await ev(() => {
     const c = __ctx, P = c.player, C = c.colossal, k = __cap, r = C.object.position;
     const pp = k.V(r.x - 40, 30, r.z - 60);
@@ -443,12 +455,12 @@ async function captureWalkthrough() {
   });
   beat('fight phase II: lock on ankles, hooks');
   await ev(() => { __cap.tap('KeyQ'); __cap.tap('KeyE'); __cap.hold('Space'); });
-  await attack(5);
+  await attack(4);
   await ev(() => { __cap.release('Space'); __cap.tap('KeyQ'); __cap.tap('KeyE'); });
   // 6. phase III
   await ev(() => __ctx.colossal.setPhaseDebug(3));
   beat('phase change -> III (cinematic, afternoon mood)');
-  await run(5);
+  await run(4);
   // 7. nape: approach from behind, slash; if the nape window is shut (steam), cut it through the same trySlash path
   await ev(() => {
     const c = __ctx, P = c.player, C = c.colossal, k = __cap, np = C.nape.position.clone();
@@ -481,11 +493,11 @@ async function captureWalkthrough() {
   }
   await ev(() => { __cap.release('Space'); });
   beat(`nape cut (${forcedKill ? 'trySlash at the nape' : 'player slash'}) -> kill cam`);
-  await run(13);
+  await run(12.5);
   // 8. victory screen (DOM; give its entrance animation wall-clock time)
   await page.waitForTimeout(2500);
   beat('victory screen');
-  await run(4);
+  await run(3);
   const endState = await ev(() => __cap.state());
   await page.close();
   touchSlot();

@@ -44,7 +44,7 @@ export async function create(ctx) {
       if (t0) return; t0 = performance.now();
       try { ensureBank?.(); } catch (e) { console.warn('[audio] score bank', e); }
       const queue = ORDER.concat(Object.keys(SOUNDS).filter((n) => !ORDER.includes(n) && !LAZY.has(n)));
-      const idle = () => new Promise((r) => (window.requestIdleCallback ? requestIdleCallback(() => r(), { timeout: 60 }) : setTimeout(r, 8)));
+      const idle = () => new Promise((r) => (ctx.mode === 'loading' || !window.requestIdleCallback ? setTimeout(r, 0) : requestIdleCallback(() => r(), { timeout: 60 })));
       const worker = async () => {
         while (queue.length) {
           const name = queue.shift(), def = SOUNDS[name]; if (!def) continue;
@@ -68,8 +68,10 @@ export async function create(ctx) {
     lazyP[name] = (async () => { const list = []; for (let v = 0; v < def.variants; v++) list.push(await renderSound(name, v)); buffers[name] = list; if (LOOPABLE.includes(name)) loopBuffers[name] = [await renderSound(name, 0, true)]; stats.rendered++; })()
       .catch((e) => { stats.errors++; console.warn('[audio] lazy render failed', name, e); });
   }
-  ctx.events.on('loaded', () => setTimeout(() => startRender(), 50));
-  setTimeout(() => startRender(), 45000); // safety net if 'loaded' never fires
+  // perf: synthesis starts right away, under the loading screen (main.js awaits bankReady before 'ready'), so its
+  // ~2.5 s of main-thread graph building (single tasks up to ~200 ms) never lands in the intro or in play
+  setTimeout(() => startRender(), 0);
+  const bankReady = Promise.all([renderAll, ensureBank?.() ?? Promise.resolve()]).catch(() => {});
 
   // ------------------------------------------------ unlock (call from a click; any first gesture also works)
   let unlockP = null;
@@ -388,7 +390,7 @@ export async function create(ctx) {
     },
     loudness: (b) => loudness(b),
   };
-  return { update, unlock, play, loop, music, duck, stinger, motif, setMasterVolume, debug,
+  return { update, unlock, play, loop, music, duck, stinger, motif, setMasterVolume, debug, bankReady,
     heroic: (n) => score?.heroic(n), shellshock: (k, s) => mx?.shellshock(k, s),
     get unlocked() { return unlocked; }, get musicState() { return musicState; } };
 }
