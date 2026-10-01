@@ -7,3 +7,4 @@ dist.old/
 
 # third-party reference images (kept local, not redistributed)
 ref/
+.wrangler/
