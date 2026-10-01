@@ -71,8 +71,8 @@ vec2 cSphere(vec3 ro, vec3 rd, float r) {
   if (d < 0.0) return vec2(-1.0); d = sqrt(d); return vec2(-b - d, -b + d);
 }
 float cloudCov(vec3 q) {
-  vec4 w = texture(uNoise, vec3(q.xz * 0.019, 0.37));
-  vec4 w2 = texture(uNoise, vec3(q.xz * 0.057 + 0.5, 0.71));
+  vec4 w = textureLod(uNoise, vec3(q.xz * 0.019, 0.37), 0.0);
+  vec4 w2 = textureLod(uNoise, vec3(q.xz * 0.057 + 0.5, 0.71), 0.0);
   float m = w.r * 0.7 + w2.r * 0.45 + w2.g * 0.2 - 0.25;
   return clamp(smoothstep(0.55 - uCloudA.z * 0.6, 1.0 - uCloudA.z * 0.45, m), 0.0, 1.0);
 }
@@ -84,13 +84,13 @@ float cloudD(vec3 p, float hf, int lod) {
   // cumulus profile: flat dark bases, rounded cauliflower tops, taller where coverage is high
   float topF = mix(0.25, 1.0, cov);
   float prof = smoothstep(0.0, 0.06, hf) * (1.0 - smoothstep(topF * 0.3, topF, hf));
-  vec4 n = texture(uNoise, q * vec3(uCloudB.x, uCloudB.x * 1.4, uCloudB.x));
+  vec4 n = textureLod(uNoise, q * vec3(uCloudB.x, uCloudB.x * 1.4, uCloudB.x), 0.0);
   float lf = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
   float base = cRemap(n.r, -(1.0 - lf) * 0.35, 1.0, 0.0, 1.0);
   float d = cRemap(base * prof, 1.0 - cov * 0.75, 1.0, 0.0, 1.0) * cov;
   if (d <= 0.0) return 0.0;
   if (lod == 0) {
-    vec4 dn = texture(uNoise, q * uCloudB.y + vec3(0.0, hf * 0.25, 0.0));
+    vec4 dn = textureLod(uNoise, q * uCloudB.y + vec3(0.0, hf * 0.25, 0.0), 0.0);
     float df = dn.g * 0.625 + dn.b * 0.25 + dn.a * 0.125;
     df = mix(1.0 - df, df, clamp(hf * 3.0, 0.0, 1.0)); // wispy bottoms, billowy tops
     d = cRemap(d, df * uCloudB.z, 1.0, 0.0, 1.0);
@@ -105,9 +105,9 @@ vec4 aotCirrus(vec3 ro, vec3 rd) {
   float t = cSphere(ro, rd, C_RG + 8.0).y;
   vec3 p = ro + rd * t; vec2 q = p.xz + uCloudOff.xz * 0.5;
   vec2 w = vec2(q.x * 0.8 + q.y * 0.3, q.y * 0.45 - q.x * 0.15); // mild shear only: long streaks read as beams in perspective
-  float big = texture(uNoise, vec3(q * 0.007, 0.43)).r;
-  float n1 = texture(uNoise, vec3(w * 0.04, 0.17)).g;
-  float n2 = texture(uNoise, vec3(w * 0.13 + n1 * 0.25, 0.61)).b;
+  float big = textureLod(uNoise, vec3(q * 0.007, 0.43), 0.0).r;
+  float n1 = textureLod(uNoise, vec3(w * 0.04, 0.17), 0.0).g;
+  float n2 = textureLod(uNoise, vec3(w * 0.13 + n1 * 0.25, 0.61), 0.0).b;
   float d = smoothstep(0.3, 0.85, big) * smoothstep(0.5, 0.9, n1 * 0.7 + n2 * 0.5) * uCloudC.z;
   d *= smoothstep(0.0, 0.08, rd.y) * exp(-t / 220.0);
   float mu = dot(rd, uAotSunDir);
@@ -234,7 +234,7 @@ precision highp float;
 varying vec2 vUv;
 uniform mat4 uInvProj, uCamWorld, uPrevVP;
 uniform vec3 uCamPos;
-uniform float uFrame, uBlend, uSteps;
+uniform float uFrame, uBlend, uSteps, uChecker;
 uniform sampler2D uHist;
 ${GLSL_SKY_PARS}
 ${GLSL_HASH}
@@ -245,14 +245,20 @@ void main() {
   vec3 dir = normalize(mat3(uCamWorld) * normalize(vp.xyz / vp.w));
   vec4 c = vec4(0.0, 0.0, 0.0, 1.0);
   if (dir.y > -0.03) {
-    float j = aotIGN(gl_FragCoord.xy + mod(uFrame, 64.0) * 5.588238);
-    c = aotClouds(uCamPos, dir, j, uSteps);
-    vec4 bk = aotBanks(dir);
-    c = vec4(c.rgb + c.a * bk.rgb, c.a * bk.a); // volumetric deck in front of the far smoke banks
+    // perf: checkerboard — each frame raymarches half of the pixels; the other half reprojects last frame's result
+    // (the history already accumulates ~6 frames, so every pixel is still refreshed every second frame)
     vec4 pc = uPrevVP * vec4(dir, 0.0);
-    if (pc.w > 0.0 && uBlend > 0.0) {
-      vec2 puv = pc.xy / pc.w * 0.5 + 0.5;
-      if (puv.x > 0.001 && puv.y > 0.001 && puv.x < 0.999 && puv.y < 0.999) c = mix(c, texture2D(uHist, puv), uBlend);
+    vec2 puv = pc.w > 0.0 ? pc.xy / pc.w * 0.5 + 0.5 : vec2(-1.0);
+    bool histOk = uBlend > 0.0 && puv.x > 0.002 && puv.y > 0.002 && puv.x < 0.998 && puv.y < 0.998;
+    bool skip = histOk && uChecker > 0.5 && mod(floor(gl_FragCoord.x * 0.0625) + floor(gl_FragCoord.y * 0.125) + uFrame, 2.0) > 0.5;   // 16x8 tiles: whole warps skip (no divergence)
+    if (skip) {
+      c = textureLod(uHist, puv, 0.0);
+    } else {
+      float j = aotIGN(gl_FragCoord.xy + mod(uFrame, 64.0) * 5.588238);
+      c = aotClouds(uCamPos, dir, j, uSteps);
+      vec4 bk = aotBanks(dir);
+      c = vec4(c.rgb + c.a * bk.rgb, c.a * bk.a); // volumetric deck in front of the far smoke banks
+      if (histOk) c = mix(c, textureLod(uHist, puv, 0.0), uBlend);
     }
   }
   gl_FragColor = c;
@@ -477,6 +483,7 @@ export async function create(ctx) {
       uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uPrevVP: { value: new THREE.Matrix4() },
       uCamPos: { value: new THREE.Vector3() }, uFrame: { value: 0 }, uBlend: { value: 0 },
       uSteps: { value: qlevel === 'high' ? 32 : qlevel === 'medium' ? 24 : 16 }, uHist: { value: null },
+      uChecker: { value: ctx.params?.cloudcb === '0' ? 0 : 1 },
     },
   });
   const cloudScale = qlevel === 'low' ? 0.33 : 0.5;
@@ -677,7 +684,7 @@ export async function create(ctx) {
       const jumped = lastCamPos.distanceToSquared(camPos) > 60 * 60;
       lastCamPos.copy(camPos);
       u.uPrevVP.value.copy(prevVP);
-      u.uBlend.value = histValid && !jumped ? 0.82 : 0;
+      u.uBlend.value = histValid && !jumped ? (u.uChecker.value > 0.5 ? 0.72 : 0.82) : 0;
       u.uFrame.value = cloudFrame++ % 64;
       u.uHist.value = cloudRT[cloudIdx].texture;
       const dst = cloudRT[1 - cloudIdx];

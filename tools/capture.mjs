@@ -102,6 +102,8 @@ function installHelpers() {
       window.__cap.lastCam = { pos: [...(p.toArray ? p.toArray() : p)], target: [...(t.toArray ? t.toArray() : t)], fov: c.camera.fov };
     },
     key, tap(code) { key(code, true); key(code, false); },
+    // converge the half-res temporally accumulated clouds for the pinned camera (cloud pass only, then one full render)
+    settle(n = 24) { for (let i = 0; i < n; i++) c.sky?.renderClouds?.(c.camera); G.render(); return n; },
     hold(code) { key(code, true); }, release(code) { key(code, false); },
     // highest solid surface under (x,z) excluding characters
     surface(x, z, from = 200) { return c.physics.raycast(V(x, from, z), DOWN, from + 50, { exclude: ['titans', 'colossal', 'player'] }); },

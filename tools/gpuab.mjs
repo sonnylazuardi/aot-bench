@@ -12,6 +12,7 @@ await page.routeWebSocket(/.*/, () => {}).catch(() => {}); // no HMR reloads mid
 await page.goto('http://127.0.0.1:5190' + (args.url || '/?skip=1&q=high'), { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => document.body.dataset.ready === '1', null, { timeout: 180000 });
 if (args.eval) await page.evaluate(args.eval);
+if (args.only) await page.evaluate((o) => { window.__abOnly = o.split(','); }, String(args.only));
 await page.waitForTimeout(Number(args.settle || 6) * 1000);
 const out = await page.evaluate(async (secs) => {
   const ctx = window.__ctx, R = ctx.renderer, S = ctx.scene;
@@ -37,13 +38,19 @@ const out = await page.evaluate(async (secs) => {
     if (!c.name || /sun|skyHemi|colossal|storyVapor/.test(c.name) || c.isLight || c.isCamera) continue;
     toggles['obj:' + c.name] = [() => { c.userData.__v = c.visible; c.visible = false; }, () => { c.visible = c.userData.__v; }];
   }
+  const only = window.__abOnly;
   for (const [k, [off, on]] of Object.entries(toggles)) {
-    try { off(); await wait(300); res[k] = await gpu(); } catch (e) { res[k] = String(e); } finally { on(); await wait(300); }
+    if (only && !only.some((o) => k.includes(o))) continue;
+    const d = [];
+    for (let rep = 0; rep < 2; rep++) {
+      try { const b = await gpu(); off(); await wait(250); const t = await gpu(); d.push(b.gpu - t.gpu); res[k] = { ...t, base: b.gpu }; } catch (e) { res[k] = String(e); } finally { on(); await wait(250); }
+    }
+    res[k].saves = d.map((x) => +x.toFixed(2));
   }
   return res;
 }, secs);
 const base = out.base.gpu;
 console.log('scene:', out.names);
-for (const [k, v] of Object.entries(out)) if (k !== 'names') console.log(k.padEnd(22), JSON.stringify(v), k === 'base' ? '' : `saves ${(base - v.gpu).toFixed(2)} ms gpu`);
+for (const [k, v] of Object.entries(out)) if (k !== 'names') console.log(k.padEnd(22), k === 'base' ? JSON.stringify(v) : `saves ${JSON.stringify(v.saves)} ms gpu (base ${v.base}, cpu ${v.cpu}, calls ${v.calls})`);
 if (errs.length) console.log('pageerrors:', errs.slice(0, 5));
 await page.close(); await browser.close();
