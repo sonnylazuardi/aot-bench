@@ -219,6 +219,7 @@ export async function create(ctx) {
   ].map(([b, p, rate, size]) => ({ bone: bone(b), off: new THREE.Vector3(...p).sub(bindPos(b)), rate, size, acc: Math.random(), pos: new THREE.Vector3(), idle: /^chest$/.test(b) && (Math.abs(p[0]) > 0.1 || p[2] < -0.08) }));
   let steamK = 0;
   const fxHandles = [];
+  model?.fitEmitters(EMIT);
   const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
   const center = new THREE.Vector3();
   function emitSteam(dt) {

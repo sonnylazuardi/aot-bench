@@ -206,8 +206,31 @@ async function normalFromColor(tex, strength, blur) {
   }
   return sharp(out, { raw: { width: W, height: H, channels: 3 } }).png().toBuffer();
 }
+// metallicRoughness map derived from the base colour: G = roughness (pale fascia/bone/teeth dry 0.68, red muscle
+// wet ~0.36, dark crevices wettest), B = metalness 0, R = wetness (three uses it as the clearcoat mask; glTF ignores R)
+async function ormFromColor(tex) {
+  const img = Buffer.from(tex.getImage());
+  const { data, info } = await sharp(img).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const W = info.width, H = info.height, out = Buffer.alloc(W * H * 3);
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  for (let i = 0; i < W * H; i++) {
+    const r = data[i * 3] / 255, g = data[i * 3 + 1] / 255, b = data[i * 3 + 2] / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), sat = mx > 1e-3 ? (mx - mn) / mx : 0;
+    const fascia = ss(0.3, 0.55, mx) * (1 - ss(0.35, 0.62, sat));
+    const crevice = 1 - ss(0.04, 0.2, mx);
+    const rough = 0.36 + 0.32 * fascia - 0.08 * crevice;
+    out[i * 3] = Math.round((1 - fascia) * 255); out[i * 3 + 1] = Math.round(rough * 255); out[i * 3 + 2] = 0;
+  }
+  return sharp(out, { raw: { width: W, height: H, channels: 3 } }).png().toBuffer();
+}
 for (const m of R.listMaterials()) {
   m.setMetallicFactor(CFG.metalness).setRoughnessFactor(CFG.roughness);
+  if (CFG.roughnessMap !== false && m.getBaseColorTexture() && !m.getMetallicRoughnessTexture()) {
+    const bc = m.getBaseColorTexture();
+    const orm = doc.createTexture((bc.getName() || m.getName()) + '_mr').setImage(new Uint8Array(await ormFromColor(bc))).setMimeType('image/png');
+    m.setMetallicRoughnessTexture(orm).setRoughnessFactor(1).setMetallicFactor(CFG.metalness);
+    m.getMetallicRoughnessTextureInfo().setTexCoord(m.getBaseColorTextureInfo().getTexCoord());
+  }
   const bc = m.getBaseColorTexture();
   if (CFG.normals && bc && !m.getNormalTexture()) {
     const png = await normalFromColor(bc, CFG.normalStrength, CFG.normalBlur);

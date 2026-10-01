@@ -56,9 +56,13 @@ export async function createColossalModel(ctx, { root, bones, bdefs, bi, K, hero
   const mats = [];
   const skinMat = (src) => {
     if (matCache.has(src)) return matCache.get(src);
+    // roughnessMap (G) / clearcoatMap (R = wetness) are derived from the base colour by the import tool:
+    // red muscle wet and glossy, pale fascia plates / bone / teeth dry
+    const rm = src.roughnessMap || null;
     const m = new THREE.MeshPhysicalMaterial({
       name: 'colossal_' + src.name, map: src.map, normalMap: src.normalMap,
-      roughness: 0.5, metalness: 0, clearcoat: 0.28, clearcoatRoughness: 0.42,   // wet, skinless sheen
+      roughnessMap: rm, roughness: rm ? 1 : 0.5, metalness: 0,
+      clearcoat: rm ? 0.42 : 0.28, clearcoatMap: rm, clearcoatRoughness: 0.34,   // wet, skinless sheen
       side: THREE.FrontSide,
     });
     if (src.normalMap) m.normalScale.copy(src.normalScale).multiplyScalar(0.9);
@@ -219,9 +223,23 @@ export async function createColossalModel(ctx, { root, bones, bdefs, bi, K, hero
     const n = tp('Neck'), h = tp('Head');
     return new THREE.Vector3(0, (n.y + h.y) / 2, n.z - 0.045);
   })();
+  // Achilles tendons: the back-most skin point a little above each ankle joint (rest pose), just under the skin
+  const achilles = (S) => {
+    const A = tp(S + 'Foot'), y0 = A.y + 0.035, best = new THREE.Vector3(0, 0, Infinity), p = new THREE.Vector3();
+    for (const mesh of lods[1].length ? lods[1] : lods[0]) {
+      const n = mesh.geometry.attributes.position.count;
+      for (let i = 0; i < n; i++) {
+        mesh.getVertexPosition(i, p); mesh.localToWorld(p); p.applyMatrix4(rootInv);
+        if (Math.abs(p.y - y0) < 0.012 && Math.abs(p.x - A.x) < 0.035 && p.z < best.z) best.copy(p);
+      }
+    }
+    if (!Number.isFinite(best.z)) best.set(A.x, y0, A.z - 0.04);
+    best.z += 0.008;
+    return best.sub(A).applyQuaternion(restGroupQ.get(T[S + 'Foot']).clone().invert());
+  };
   const WP = {
     hand_L: { b: T.LeftHand, d: D('handL') }, hand_R: { b: T.RightHand, d: D('handR') },
-    ankle_L: { b: T.LeftFoot, d: D('footL') }, ankle_R: { b: T.RightFoot, d: D('footR') },
+    ankle_L: { b: T.LeftFoot, local: achilles('Left') }, ankle_R: { b: T.RightFoot, local: achilles('Right') },
     nape: { b: T.Neck, local: napeRest.clone().sub(tp('Neck')).applyQuaternion(restGroupQ.get(T.Neck).clone().invert()) },
   };
   const headLocal = new THREE.Vector3(0, 0.055, 0.02).applyQuaternion(restGroupQ.get(T.Head).clone().invert());
@@ -246,6 +264,18 @@ export async function createColossalModel(ctx, { root, bones, bdefs, bi, K, hero
       if (tb) c.b = tb;
       // finger-tip capsules: the model's middle finger end
       if (!tb && /middleTip/.test(c.b.name)) c.b = T[(c.b.name.endsWith('L') ? 'Left' : 'Right') + 'HandMiddle4'] || c.b;
+    }
+  }
+
+  // steam emitters (colossal.js EMIT: { bone, off }): re-point at the model's bones, same rest position, so vents
+  // and steamForceAt follow the model's anatomy
+  function fitEmitters(emit) {
+    for (const e of emit) {
+      const tb = dToT.get(e.bone); if (!tb) continue;
+      const di = dIdx.get(e.bone), C = mapT.get(tb).C;
+      const p = new THREE.Vector3(...bdefs[di].pos).add(e.off);   // driver rest (identity rotations) -> group space
+      e.off = p.sub(restGroupP.get(tb)).applyQuaternion(_q.copy(C).multiply(restGroupQ.get(tb)).invert());
+      e.bone = tb;
     }
   }
 
@@ -285,7 +315,7 @@ export async function createColossalModel(ctx, { root, bones, bdefs, bi, K, hero
   return {
     object: holder, meshes, shadowProxies, tris, shadowTris, bones: T, lods, materials: mats,
     get lod() { return lod; },
-    fitCaps,
+    fitCaps, fitEmitters,
     update(dt, sys, G) {
       retarget();
       if (sys?.weakPoints) fixWeakPoints(sys.weakPoints);

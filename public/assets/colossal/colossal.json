@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-01T14:17:38.866Z",
+ "generated": "2026-10-01T14:41:06.581Z",
  "source": "colossal_titan.glb",
  "tool": "tools/import-colossal.mjs",
  "units": "procedural-rig model units (src/story/colossalBody.js): feet y=0, facing +Z, +X = its left; colossal.js scales by K",
@@ -24,7 +24,7 @@
   "lod2": 9997,
   "shadow": 3997
  },
- "bytes": 2691692,
+ "bytes": 2798384,
  "landmarks": {
   "headTop": [
    0,

@@ -89,7 +89,7 @@ export function buildTitle(ctx) {
   const panel = el('div', 'panel', `<div class="ctl">${controlsHTML(ctx)}</div>`);
   root.appendChild(panel);
   root.appendChild(el('div', 'hint', `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="7" rx="1.5"/><rect x="17" y="14" width="4" height="7" rx="1.5"/></svg>Headphones recommended`));
-  root.appendChild(el('div', 'disc', 'An unofficial, non-commercial fan project. <i>Attack on Titan</i> © Hajime Isayama / Kodansha — not affiliated with or endorsed by the rights holders. Every model, texture, sound and note of music here is generated procedurally in your browser.'));
+  root.appendChild(el('div', 'disc', 'An unofficial, non-commercial fan project. <i>Attack on Titan</i> © Hajime Isayama / Kodansha — not affiliated with or endorsed by the rights holders. Everything here is generated procedurally in your browser, except the Colossal Titan model: &ldquo;Colossal Titan&rdquo; by Sidaivan (Sketchfab), CC BY 4.0, modified.'));
 
   // "press any key" gate (browsers need a gesture before audio can start); skipped for screenshots
   let gated = !shot, active = false;
